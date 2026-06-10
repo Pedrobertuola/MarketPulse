@@ -1,0 +1,227 @@
+import { useState } from 'react';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+
+import { EmptyState, ErrorState, LoadingState, SectionTitle } from '../components';
+import { getCryptoQuote, searchCrypto } from '../services';
+import type { Asset, CryptoSearchResult } from '../types';
+
+type SearchScreenProps = {
+  watchlist: Asset[];
+  onAddAsset: (asset: Asset) => Promise<void>;
+};
+
+export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<CryptoSearchResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [addingAssetId, setAddingAssetId] = useState<string | null>(null);
+
+  const watchlistCryptoIds = new Set(
+    watchlist
+      .filter((asset) => asset.type === 'crypto')
+      .map((asset) => asset.coingeckoId ?? asset.id)
+  );
+
+  const handleSearch = async () => {
+    const normalizedQuery = query.trim();
+
+    if (!normalizedQuery) {
+      setResults([]);
+      setError('Digite o nome ou simbolo de uma criptomoeda para buscar.');
+      setHasSearched(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setHasSearched(true);
+
+    try {
+      const nextResults = await searchCrypto(normalizedQuery);
+      setResults(nextResults);
+    } catch {
+      setError('Nao foi possivel buscar criptomoedas agora.');
+      setResults([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddAsset = async (result: CryptoSearchResult) => {
+    setAddingAssetId(result.id);
+    setError(null);
+
+    try {
+      const quote = await getCryptoQuote(result.id);
+
+      await onAddAsset({
+        id: result.id,
+        coingeckoId: result.id,
+        symbol: result.symbol,
+        name: result.name,
+        type: 'crypto',
+        exchange: 'CoinGecko',
+        imageUrl: result.imageUrl,
+        quote,
+      });
+    } catch {
+      setError('Nao foi possivel adicionar essa criptomoeda a watchlist.');
+    } finally {
+      setAddingAssetId(null);
+    }
+  };
+
+  return (
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={{
+        backgroundColor: '#F8FAFC',
+        flexGrow: 1,
+        gap: 20,
+        padding: 24,
+      }}
+      style={{ flex: 1, backgroundColor: '#F8FAFC' }}
+    >
+      <SectionTitle
+        title="Buscar criptomoedas"
+        subtitle="Procure ativos no CoinGecko e adicione os que fizerem sentido para sua watchlist."
+      />
+
+      <View style={{ gap: 12 }}>
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={setQuery}
+          onSubmitEditing={() => {
+            void handleSearch();
+          }}
+          placeholder="Ex.: bitcoin, ethereum, solana"
+          placeholderTextColor="#94A3B8"
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderColor: '#CBD5E1',
+            borderRadius: 18,
+            borderWidth: 1,
+            color: '#0F172A',
+            fontSize: 16,
+            paddingHorizontal: 16,
+            paddingVertical: 14,
+          }}
+          value={query}
+        />
+
+        <Pressable
+          onPress={() => {
+            void handleSearch();
+          }}
+          style={({ pressed }) => ({
+            alignItems: 'center',
+            backgroundColor: pressed ? '#0F172A' : '#1E293B',
+            borderRadius: 18,
+            paddingVertical: 14,
+          })}
+        >
+          <Text
+            selectable
+            style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700' }}
+          >
+            Buscar no CoinGecko
+          </Text>
+        </Pressable>
+      </View>
+
+      {error ? <ErrorState message={error} /> : null}
+
+      {isLoading ? (
+        <LoadingState message="Buscando criptomoedas..." />
+      ) : results.length > 0 ? (
+        <View style={{ gap: 12 }}>
+          {results.map((result) => {
+            const isAdded = watchlistCryptoIds.has(result.id);
+            const isAdding = addingAssetId === result.id;
+
+            return (
+              <View
+                key={result.id}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderColor: '#E2E8F0',
+                  borderRadius: 20,
+                  borderWidth: 1,
+                  gap: 12,
+                  padding: 18,
+                }}
+              >
+                <View
+                  style={{
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text
+                      selectable
+                      style={{ color: '#0F172A', fontSize: 18, fontWeight: '700' }}
+                    >
+                      {result.symbol}
+                    </Text>
+                    <Text selectable style={{ color: '#475569', fontSize: 14 }}>
+                      {result.name}
+                    </Text>
+                    <Text selectable style={{ color: '#64748B', fontSize: 13 }}>
+                      {result.marketCapRank
+                        ? `Ranking de mercado #${result.marketCapRank}`
+                        : 'Sem ranking disponivel'}
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    disabled={isAdded || isAdding}
+                    onPress={() => {
+                      void handleAddAsset(result);
+                    }}
+                    style={({ pressed }) => ({
+                      backgroundColor: isAdded
+                        ? '#DCFCE7'
+                        : pressed
+                          ? '#BFDBFE'
+                          : '#DBEAFE',
+                      borderRadius: 999,
+                      opacity: isAdding ? 0.7 : 1,
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
+                    })}
+                  >
+                    <Text
+                      selectable
+                      style={{
+                        color: isAdded ? '#166534' : '#1D4ED8',
+                        fontSize: 13,
+                        fontWeight: '700',
+                      }}
+                    >
+                      {isAdded ? 'Adicionado' : isAdding ? 'Salvando...' : 'Adicionar'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : hasSearched ? (
+        <EmptyState
+          title="Nenhum resultado encontrado"
+          message="Tente buscar por outro nome ou simbolo para encontrar a criptomoeda desejada."
+        />
+      ) : (
+        <EmptyState
+          title="Busque uma criptomoeda"
+          message="Os resultados do CoinGecko vao aparecer aqui quando voce fizer sua primeira busca."
+        />
+      )}
+    </ScrollView>
+  );
+}
