@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import {
   EmptyState,
@@ -14,7 +14,12 @@ import {
   getCryptoMarketChart,
   getCryptoQuote,
 } from '../services';
-import type { Asset, ChartPoint } from '../types';
+import {
+  addAlertRule,
+  getAlertRulesByAsset,
+  removeAlertRule,
+} from '../storage';
+import type { AlertRule, AlertRuleType, Asset, ChartPoint } from '../types';
 import {
   calculateBollingerBands,
   calculateRSI,
@@ -30,6 +35,12 @@ type AssetDetailScreenProps = {
 };
 
 const timeframes: Timeframe[] = ['1D', '7D', '1M', '3M', '1Y'];
+const alertRuleOptions: Array<{ type: AlertRuleType; label: string }> = [
+  { type: 'price_above', label: 'Preco acima' },
+  { type: 'price_below', label: 'Preco abaixo' },
+  { type: 'rsi_below_30', label: 'RSI abaixo de 30' },
+  { type: 'rsi_above_70', label: 'RSI acima de 70' },
+];
 
 const cryptoDaysByTimeframe: Record<Timeframe, 1 | 7 | 30 | 90 | 365> = {
   '1D': 1,
@@ -104,10 +115,51 @@ function getRSIInterpretation(rsi: number | null) {
   return 'Zona neutra.';
 }
 
+function getAlertRuleLabel(alertRule: AlertRule, currency: Asset['quote']['currency']) {
+  if (alertRule.type === 'price_above') {
+    return `Preco acima de ${formatCurrency(alertRule.targetValue, currency)}`;
+  }
+
+  if (alertRule.type === 'price_below') {
+    return `Preco abaixo de ${formatCurrency(alertRule.targetValue, currency)}`;
+  }
+
+  if (alertRule.type === 'rsi_below_30') {
+    return 'RSI abaixo de 30';
+  }
+
+  return 'RSI acima de 70';
+}
+
+function isAlertRuleActive(
+  alertRule: AlertRule,
+  price: number,
+  rsi: number | null
+) {
+  if (alertRule.type === 'price_above') {
+    return price > alertRule.targetValue;
+  }
+
+  if (alertRule.type === 'price_below') {
+    return price < alertRule.targetValue;
+  }
+
+  if (alertRule.type === 'rsi_below_30') {
+    return typeof rsi === 'number' && rsi < 30;
+  }
+
+  return typeof rsi === 'number' && rsi > 70;
+}
+
 export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('7D');
   const [quote, setQuote] = useState(asset.quote);
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
+  const [alertRules, setAlertRules] = useState<AlertRule[]>([]);
+  const [selectedAlertType, setSelectedAlertType] =
+    useState<AlertRuleType>('price_above');
+  const [alertTargetValue, setAlertTargetValue] = useState('');
+  const [alertError, setAlertError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -175,6 +227,24 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
     };
   }, [asset, selectedTimeframe]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAlertRules = async () => {
+      const nextAlertRules = await getAlertRulesByAsset(asset.id);
+
+      if (isMounted) {
+        setAlertRules(nextAlertRules);
+      }
+    };
+
+    void loadAlertRules();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [asset.id]);
+
   const isPositive = quote.changePercent >= 0;
   const changeColor = isPositive ? '#15803D' : '#B91C1C';
   const formattedVolume = formatVolume(
@@ -187,6 +257,44 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
   const latestBollingerBands = getLatestValue(
     calculateBollingerBands(closePrices, 20, 2)
   );
+  const isPriceAlert = selectedAlertType === 'price_above' || selectedAlertType === 'price_below';
+
+  const handleCreateAlertRule = async () => {
+    setAlertError(null);
+
+    const targetValue =
+      selectedAlertType === 'rsi_below_30'
+        ? 30
+        : selectedAlertType === 'rsi_above_70'
+          ? 70
+          : Number(alertTargetValue.replace(',', '.'));
+
+    if (!Number.isFinite(targetValue)) {
+      setAlertError('Informe um valor valido para o alerta de preco.');
+      return;
+    }
+
+    const updatedAlertRules = await addAlertRule({
+      assetId: asset.id,
+      assetName: asset.name,
+      assetSymbol: asset.symbol,
+      targetValue,
+      type: selectedAlertType,
+    });
+
+    setAlertRules(
+      updatedAlertRules.filter((alertRule) => alertRule.assetId === asset.id)
+    );
+    setAlertTargetValue('');
+  };
+
+  const handleRemoveAlertRule = async (alertRuleId: string) => {
+    const updatedAlertRules = await removeAlertRule(alertRuleId);
+
+    setAlertRules(
+      updatedAlertRules.filter((alertRule) => alertRule.assetId === asset.id)
+    );
+  };
 
   return (
     <ScrollView
@@ -331,7 +439,232 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
           message="Nao encontramos dados suficientes para desenhar o grafico neste periodo."
         />
       )}
+
+      <AlertRulesPanel
+        alertError={alertError}
+        alertRules={alertRules}
+        currency={quote.currency}
+        isPriceAlert={isPriceAlert}
+        onCreateAlertRule={handleCreateAlertRule}
+        onRemoveAlertRule={handleRemoveAlertRule}
+        onSelectAlertType={setSelectedAlertType}
+        onTargetValueChange={setAlertTargetValue}
+        price={quote.price}
+        rsi={latestRSI}
+        selectedAlertType={selectedAlertType}
+        targetValue={alertTargetValue}
+      />
     </ScrollView>
+  );
+}
+
+type AlertRulesPanelProps = {
+  alertRules: AlertRule[];
+  selectedAlertType: AlertRuleType;
+  targetValue: string;
+  isPriceAlert: boolean;
+  alertError: string | null;
+  price: number;
+  rsi: number | null;
+  currency: Asset['quote']['currency'];
+  onSelectAlertType: (alertRuleType: AlertRuleType) => void;
+  onTargetValueChange: (value: string) => void;
+  onCreateAlertRule: () => Promise<void>;
+  onRemoveAlertRule: (alertRuleId: string) => Promise<void>;
+};
+
+function AlertRulesPanel({
+  alertRules,
+  selectedAlertType,
+  targetValue,
+  isPriceAlert,
+  alertError,
+  price,
+  rsi,
+  currency,
+  onSelectAlertType,
+  onTargetValueChange,
+  onCreateAlertRule,
+  onRemoveAlertRule,
+}: AlertRulesPanelProps) {
+  return (
+    <View
+      style={{
+        backgroundColor: '#FFFFFF',
+        borderColor: '#E2E8F0',
+        borderRadius: 20,
+        borderWidth: 1,
+        gap: 16,
+        padding: 18,
+      }}
+    >
+      <Text
+        selectable
+        style={{ color: '#0F172A', fontSize: 17, fontWeight: '800' }}
+      >
+        Alertas locais
+      </Text>
+
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {alertRuleOptions.map((option) => {
+          const isSelected = selectedAlertType === option.type;
+
+          return (
+            <Pressable
+              key={option.type}
+              onPress={() => onSelectAlertType(option.type)}
+              style={({ pressed }) => ({
+                backgroundColor: isSelected
+                  ? '#0F172A'
+                  : pressed
+                    ? '#E2E8F0'
+                    : '#FFFFFF',
+                borderColor: '#CBD5E1',
+                borderRadius: 999,
+                borderWidth: 1,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+              })}
+            >
+              <Text
+                selectable
+                style={{
+                  color: isSelected ? '#FFFFFF' : '#334155',
+                  fontSize: 13,
+                  fontWeight: '700',
+                }}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {isPriceAlert ? (
+        <TextInput
+          keyboardType="decimal-pad"
+          onChangeText={onTargetValueChange}
+          placeholder="Valor do preco"
+          placeholderTextColor="#94A3B8"
+          style={{
+            backgroundColor: '#F8FAFC',
+            borderColor: '#CBD5E1',
+            borderRadius: 16,
+            borderWidth: 1,
+            color: '#0F172A',
+            fontSize: 15,
+            paddingHorizontal: 14,
+            paddingVertical: 12,
+          }}
+          value={targetValue}
+        />
+      ) : (
+        <Text selectable style={{ color: '#475569', fontSize: 14 }}>
+          O limite deste alerta e fixo pelo RSI selecionado.
+        </Text>
+      )}
+
+      {alertError ? <ErrorState message={alertError} /> : null}
+
+      <Pressable
+        onPress={() => {
+          void onCreateAlertRule();
+        }}
+        style={({ pressed }) => ({
+          alignItems: 'center',
+          backgroundColor: pressed ? '#0F172A' : '#1E293B',
+          borderRadius: 16,
+          paddingVertical: 12,
+        })}
+      >
+        <Text selectable style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>
+          Criar alerta
+        </Text>
+      </Pressable>
+
+      {alertRules.length > 0 ? (
+        <View style={{ gap: 10 }}>
+          {alertRules.map((alertRule) => {
+            const isActive = isAlertRuleActive(alertRule, price, rsi);
+
+            return (
+              <View
+                key={alertRule.id}
+                style={{
+                  backgroundColor: isActive ? '#F0FDF4' : '#F8FAFC',
+                  borderColor: isActive ? '#BBF7D0' : '#E2E8F0',
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  gap: 10,
+                  padding: 14,
+                }}
+              >
+                <View
+                  style={{
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                  }}
+                >
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text
+                      selectable
+                      style={{
+                        color: '#0F172A',
+                        fontSize: 14,
+                        fontWeight: '800',
+                      }}
+                    >
+                      {getAlertRuleLabel(alertRule, currency)}
+                    </Text>
+                    <Text
+                      selectable
+                      style={{
+                        color: isActive ? '#15803D' : '#64748B',
+                        fontSize: 13,
+                        fontWeight: '700',
+                      }}
+                    >
+                      {isActive ? 'Condicao ativa' : 'Condicao inativa'}
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    onPress={() => {
+                      void onRemoveAlertRule(alertRule.id);
+                    }}
+                    style={({ pressed }) => ({
+                      backgroundColor: pressed ? '#FEE2E2' : '#FFF1F2',
+                      borderRadius: 999,
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                    })}
+                  >
+                    <Text
+                      selectable
+                      style={{
+                        color: '#B91C1C',
+                        fontSize: 12,
+                        fontWeight: '800',
+                      }}
+                    >
+                      Remover
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : (
+        <EmptyState
+          title="Nenhum alerta local"
+          message="Crie regras simples para acompanhar preco e RSI deste ativo."
+        />
+      )}
+    </View>
   );
 }
 

@@ -1,5 +1,11 @@
 export type AssetType = 'stock' | 'crypto';
 
+export type AlertRuleType =
+  | 'price_above'
+  | 'price_below'
+  | 'rsi_below_30'
+  | 'rsi_above_70';
+
 export type PriceQuote = {
   price: number;
   change: number;
@@ -18,6 +24,16 @@ export type Asset = {
   coingeckoId?: string;
   imageUrl?: string;
   quote: PriceQuote;
+};
+
+export type AlertRule = {
+  id: string;
+  assetId: string;
+  assetSymbol: string;
+  assetName: string;
+  type: AlertRuleType;
+  targetValue: number;
+  createdAt: string;
 };
 
 export type Candle = {
