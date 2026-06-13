@@ -6,6 +6,7 @@ export type PriceQuote = {
   changePercent: number;
   currency: 'BRL' | 'USD';
   updatedAt: string;
+  volume?: number;
 };
 
 export type Asset = {
@@ -26,6 +27,13 @@ export type Candle = {
   low: number;
   close: number;
   volume?: number;
+};
+
+export type BrazilianStockSearchResult = {
+  ticker: string;
+  name: string;
+  imageUrl?: string;
+  type: 'stock';
 };
 
 export type ChartPoint = {

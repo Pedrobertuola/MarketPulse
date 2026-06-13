@@ -21,6 +21,7 @@ type SimplePriceResponse = Record<
   {
     brl?: number;
     brl_24h_change?: number;
+    brl_24h_vol?: number;
     last_updated_at?: number;
   }
 >;
@@ -72,7 +73,12 @@ async function fetchCoinGecko<T>(
   return (await response.json()) as T;
 }
 
-function mapQuote(price: number, changePercent: number, lastUpdatedAt?: number): PriceQuote {
+function mapQuote(
+  price: number,
+  changePercent: number,
+  lastUpdatedAt?: number,
+  volume?: number
+): PriceQuote {
   const normalizedChangePercent = Number.isFinite(changePercent) ? changePercent : 0;
   const previousPriceFactor = 1 + normalizedChangePercent / 100;
   const previousPrice =
@@ -87,6 +93,7 @@ function mapQuote(price: number, changePercent: number, lastUpdatedAt?: number):
     updatedAt: lastUpdatedAt
       ? new Date(lastUpdatedAt * 1000).toISOString()
       : new Date().toISOString(),
+    volume,
   };
 }
 
@@ -116,6 +123,7 @@ export async function getCryptoQuote(id: string): Promise<PriceQuote> {
     ids: id,
     vs_currencies: DEFAULT_VS_CURRENCY,
     include_24hr_change: true,
+    include_24hr_vol: true,
     include_last_updated_at: true,
     precision: 'full',
   });
@@ -129,7 +137,8 @@ export async function getCryptoQuote(id: string): Promise<PriceQuote> {
   return mapQuote(
     cryptoData.brl,
     cryptoData.brl_24h_change ?? 0,
-    cryptoData.last_updated_at
+    cryptoData.last_updated_at,
+    cryptoData.brl_24h_vol
   );
 }
 

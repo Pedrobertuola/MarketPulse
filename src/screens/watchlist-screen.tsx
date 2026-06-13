@@ -8,7 +8,7 @@ import {
   LoadingState,
   SectionTitle,
 } from '../components';
-import { getCryptoQuote } from '../services';
+import { getBrazilianStockQuote, getCryptoQuote } from '../services';
 import type { Asset } from '../types';
 
 type WatchlistScreenProps = {
@@ -16,6 +16,7 @@ type WatchlistScreenProps = {
   isLoading: boolean;
   error: string | null;
   onRemoveAsset: (assetId: string) => Promise<void>;
+  onSelectAsset: (asset: Asset) => void;
 };
 
 export function WatchlistScreen({
@@ -23,33 +24,44 @@ export function WatchlistScreen({
   isLoading,
   error,
   onRemoveAsset,
+  onSelectAsset,
 }: WatchlistScreenProps) {
   const [displayAssets, setDisplayAssets] = useState<Asset[]>(watchlist);
-  const [isRefreshingCrypto, setIsRefreshingCrypto] = useState(false);
+  const [isRefreshingQuotes, setIsRefreshingQuotes] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    const refreshCryptoQuotes = async () => {
+    const refreshQuotes = async () => {
       setDisplayAssets(watchlist);
 
       const cryptoAssets = watchlist.filter((asset) => asset.type === 'crypto');
+      const stockAssets = watchlist.filter((asset) => asset.type === 'stock');
 
-      if (cryptoAssets.length === 0) {
+      if (cryptoAssets.length === 0 && stockAssets.length === 0) {
         setRefreshError(null);
-        setIsRefreshingCrypto(false);
+        setIsRefreshingQuotes(false);
         return;
       }
 
-      setIsRefreshingCrypto(true);
+      setIsRefreshingQuotes(true);
       setRefreshError(null);
 
       const quoteResults = await Promise.allSettled(
-        cryptoAssets.map(async (asset) => ({
-          assetId: asset.id,
-          quote: await getCryptoQuote(asset.coingeckoId ?? asset.id),
-        }))
+        watchlist.map(async (asset) => {
+          if (asset.type === 'crypto') {
+            return {
+              assetId: asset.id,
+              quote: await getCryptoQuote(asset.coingeckoId ?? asset.id),
+            };
+          }
+
+          return {
+            assetId: asset.id,
+            quote: await getBrazilianStockQuote(asset.symbol),
+          };
+        })
       );
 
       if (!isMounted) {
@@ -71,16 +83,16 @@ export function WatchlistScreen({
       }));
 
       setDisplayAssets(updatedAssets);
-      setIsRefreshingCrypto(false);
+      setIsRefreshingQuotes(false);
 
       if (quoteResults.some((result) => result.status === 'rejected')) {
         setRefreshError(
-          'Nem todas as cotacoes das criptomoedas puderam ser atualizadas agora.'
+          'Nem todas as cotacoes puderam ser atualizadas agora.'
         );
       }
     };
 
-    void refreshCryptoQuotes();
+    void refreshQuotes();
 
     return () => {
       isMounted = false;
@@ -122,9 +134,9 @@ export function WatchlistScreen({
             Minha watchlist
           </Text>
 
-          {isRefreshingCrypto ? (
+          {isRefreshingQuotes ? (
             <Text selectable style={{ color: '#475569', fontSize: 13 }}>
-              Atualizando criptos...
+              Atualizando precos...
             </Text>
           ) : null}
         </View>
@@ -143,6 +155,7 @@ export function WatchlistScreen({
               onRemove={(assetId) => {
                 void onRemoveAsset(assetId);
               }}
+              onPress={onSelectAsset}
             />
           ))
         ) : (

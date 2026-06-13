@@ -3,15 +3,29 @@ import { Pressable, Text, View } from 'react-native';
 import { useState } from 'react';
 
 import { useWatchlist } from './src/hooks';
-import { SearchScreen, WatchlistScreen } from './src/screens';
+import { AssetDetailScreen, SearchScreen, WatchlistScreen } from './src/screens';
+import type { Asset } from './src/types';
 import { mockWatchlistAssets } from './src/utils';
 
 type TabKey = 'watchlist' | 'search';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>('watchlist');
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const { watchlist, isLoading, error, addAsset, removeAsset } =
     useWatchlist(mockWatchlistAssets);
+
+  if (selectedAsset) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+        <StatusBar style="dark" />
+        <AssetDetailScreen
+          asset={selectedAsset}
+          onBack={() => setSelectedAsset(null)}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
@@ -28,7 +42,7 @@ export default function App() {
       >
         {[
           { key: 'watchlist', label: 'Watchlist' },
-          { key: 'search', label: 'Buscar cripto' },
+          { key: 'search', label: 'Buscar ativos' },
         ].map((tab) => {
           const isActive = activeTab === tab.key;
 
@@ -71,6 +85,7 @@ export default function App() {
           error={error}
           isLoading={isLoading}
           onRemoveAsset={removeAsset}
+          onSelectAsset={setSelectedAsset}
           watchlist={watchlist}
         />
       ) : (

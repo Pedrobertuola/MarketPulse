@@ -16,6 +16,20 @@ export const mockWatchlistAssets: Asset[] = [
     },
   },
   {
+    id: 'vale3',
+    symbol: 'VALE3',
+    name: 'Vale ON',
+    type: 'stock',
+    exchange: 'B3',
+    quote: {
+      price: 56.18,
+      change: -0.34,
+      changePercent: -0.6,
+      currency: 'BRL',
+      updatedAt: new Date().toISOString(),
+    },
+  },
+  {
     id: 'bitcoin',
     coingeckoId: 'bitcoin',
     symbol: 'BTC',
