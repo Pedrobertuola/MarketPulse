@@ -15,6 +15,12 @@ import {
   getCryptoQuote,
 } from '../services';
 import type { Asset, ChartPoint } from '../types';
+import {
+  calculateBollingerBands,
+  calculateRSI,
+  calculateSMA,
+  type BollingerBandPoint,
+} from '../utils';
 
 type Timeframe = '1D' | '7D' | '1M' | '3M' | '1Y';
 
@@ -59,6 +65,43 @@ function formatVolume(volume?: number) {
   return new Intl.NumberFormat('pt-BR', {
     maximumFractionDigits: 0,
   }).format(volume);
+}
+
+function formatIndicatorValue(value?: number | null) {
+  if (typeof value !== 'number') {
+    return 'Dados insuficientes';
+  }
+
+  return new Intl.NumberFormat('pt-BR', {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  }).format(value);
+}
+
+function getLatestValue<T>(values: Array<T | null>) {
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    if (values[index] !== null) {
+      return values[index];
+    }
+  }
+
+  return null;
+}
+
+function getRSIInterpretation(rsi: number | null) {
+  if (typeof rsi !== 'number') {
+    return 'RSI indisponivel para este periodo.';
+  }
+
+  if (rsi < 30) {
+    return 'Possivel sobrevenda.';
+  }
+
+  if (rsi > 70) {
+    return 'Possivel sobrecompra.';
+  }
+
+  return 'Zona neutra.';
 }
 
 export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
@@ -136,6 +179,13 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
   const changeColor = isPositive ? '#15803D' : '#B91C1C';
   const formattedVolume = formatVolume(
     quote.volume ?? chartData[chartData.length - 1]?.volume
+  );
+  const closePrices = chartData.map((point) => point.price);
+  const latestRSI = getLatestValue(calculateRSI(closePrices, 14));
+  const latestSMA20 = getLatestValue(calculateSMA(closePrices, 20));
+  const latestSMA50 = getLatestValue(calculateSMA(closePrices, 50));
+  const latestBollingerBands = getLatestValue(
+    calculateBollingerBands(closePrices, 20, 2)
   );
 
   return (
@@ -259,13 +309,22 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
       ) : error ? (
         <ErrorState message={error} />
       ) : chartData.length > 1 ? (
-        <PriceChart
-          color={isPositive ? '#15803D' : '#B91C1C'}
-          data={chartData.map((point) => ({
-            timestamp: point.timestamp,
-            value: point.price,
-          }))}
-        />
+        <>
+          <PriceChart
+            color={isPositive ? '#15803D' : '#B91C1C'}
+            data={chartData.map((point) => ({
+              timestamp: point.timestamp,
+              value: point.price,
+            }))}
+          />
+          <TechnicalIndicatorsSummary
+            bollingerBands={latestBollingerBands}
+            currency={quote.currency}
+            rsi={latestRSI}
+            sma20={latestSMA20}
+            sma50={latestSMA50}
+          />
+        </>
       ) : (
         <EmptyState
           title="Sem historico disponivel"
@@ -273,5 +332,132 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
         />
       )}
     </ScrollView>
+  );
+}
+
+type TechnicalIndicatorsSummaryProps = {
+  rsi: number | null;
+  sma20: number | null;
+  sma50: number | null;
+  bollingerBands: BollingerBandPoint | null;
+  currency: Asset['quote']['currency'];
+};
+
+function TechnicalIndicatorsSummary({
+  rsi,
+  sma20,
+  sma50,
+  bollingerBands,
+  currency,
+}: TechnicalIndicatorsSummaryProps) {
+  return (
+    <View
+      style={{
+        backgroundColor: '#FFFFFF',
+        borderColor: '#E2E8F0',
+        borderRadius: 20,
+        borderWidth: 1,
+        gap: 14,
+        padding: 18,
+      }}
+    >
+      <Text
+        selectable
+        style={{ color: '#0F172A', fontSize: 17, fontWeight: '800' }}
+      >
+        Indicadores tecnicos
+      </Text>
+
+      <View style={{ gap: 10 }}>
+        <IndicatorRow label="RSI 14" value={formatIndicatorValue(rsi)} />
+        <Text selectable style={{ color: '#475569', fontSize: 14 }}>
+          {getRSIInterpretation(rsi)}
+        </Text>
+        <IndicatorRow
+          label="SMA 20"
+          value={
+            typeof sma20 === 'number'
+              ? formatCurrency(sma20, currency)
+              : 'Dados insuficientes'
+          }
+        />
+        <IndicatorRow
+          label="SMA 50"
+          value={
+            typeof sma50 === 'number'
+              ? formatCurrency(sma50, currency)
+              : 'Dados insuficientes'
+          }
+        />
+      </View>
+
+      <View style={{ gap: 8 }}>
+        <Text
+          selectable
+          style={{ color: '#334155', fontSize: 14, fontWeight: '700' }}
+        >
+          Bandas de Bollinger
+        </Text>
+        <IndicatorRow
+          label="Superior"
+          value={
+            bollingerBands
+              ? formatCurrency(bollingerBands.upper, currency)
+              : 'Dados insuficientes'
+          }
+        />
+        <IndicatorRow
+          label="Media"
+          value={
+            bollingerBands
+              ? formatCurrency(bollingerBands.middle, currency)
+              : 'Dados insuficientes'
+          }
+        />
+        <IndicatorRow
+          label="Inferior"
+          value={
+            bollingerBands
+              ? formatCurrency(bollingerBands.lower, currency)
+              : 'Dados insuficientes'
+          }
+        />
+      </View>
+    </View>
+  );
+}
+
+type IndicatorRowProps = {
+  label: string;
+  value: string;
+};
+
+function IndicatorRow({ label, value }: IndicatorRowProps) {
+  return (
+    <View
+      style={{
+        alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: 12,
+      }}
+    >
+      <Text selectable style={{ color: '#64748B', fontSize: 14 }}>
+        {label}
+      </Text>
+      <Text
+        selectable
+        style={{
+          color: '#0F172A',
+          flexShrink: 1,
+          fontSize: 14,
+          fontVariant: ['tabular-nums'],
+          fontWeight: '700',
+          textAlign: 'right',
+        }}
+      >
+        {value}
+      </Text>
+    </View>
   );
 }
