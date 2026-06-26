@@ -37,11 +37,13 @@ export const mockWatchlistAssets: Asset[] = [
     type: 'crypto',
     exchange: 'CoinGecko',
     quote: {
-      price: 612345.78,
-      change: -5421.33,
+      price: 108250.42,
+      change: -956.18,
       changePercent: -0.88,
-      currency: 'BRL',
+      currency: 'USD',
       updatedAt: new Date().toISOString(),
+      marketCap: 2140000000000,
+      volume: 42800000000,
     },
   },
   {
@@ -52,11 +54,13 @@ export const mockWatchlistAssets: Asset[] = [
     type: 'crypto',
     exchange: 'CoinGecko',
     quote: {
-      price: 18345.21,
-      change: 215.77,
+      price: 3248.93,
+      change: 38.12,
       changePercent: 1.19,
-      currency: 'BRL',
+      currency: 'USD',
       updatedAt: new Date().toISOString(),
+      marketCap: 391000000000,
+      volume: 18300000000,
     },
   },
 ];

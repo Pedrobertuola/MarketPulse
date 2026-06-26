@@ -9,6 +9,7 @@ import {
   searchCrypto,
 } from '../services';
 import type { Asset, BrazilianStockSearchResult, CryptoSearchResult } from '../types';
+import { theme } from '../utils';
 
 type SearchScreenProps = {
   watchlist: Asset[];
@@ -135,12 +136,12 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
-        backgroundColor: '#F8FAFC',
+        backgroundColor: theme.colors.background,
         flexGrow: 1,
         gap: 20,
         padding: 24,
       }}
-      style={{ flex: 1, backgroundColor: '#F8FAFC' }}
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
     >
       <SectionTitle
         title="Buscar ativos"
@@ -167,11 +168,11 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
                 }}
                 style={({ pressed }) => ({
                   backgroundColor: isActive
-                    ? '#0F172A'
+                    ? theme.colors.primary
                     : pressed
-                      ? '#E2E8F0'
-                      : '#FFFFFF',
-                  borderColor: '#CBD5E1',
+                      ? theme.colors.surfacePressed
+                      : theme.colors.surface,
+                  borderColor: isActive ? theme.colors.primary : theme.colors.border,
                   borderRadius: 999,
                   borderWidth: 1,
                   paddingHorizontal: 14,
@@ -181,7 +182,7 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
                 <Text
                   selectable
                   style={{
-                    color: isActive ? '#FFFFFF' : '#334155',
+                    color: isActive ? '#03121D' : theme.colors.textMuted,
                     fontSize: 13,
                     fontWeight: '700',
                   }}
@@ -207,11 +208,11 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
           }
           placeholderTextColor="#94A3B8"
           style={{
-            backgroundColor: '#FFFFFF',
-            borderColor: '#CBD5E1',
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.border,
             borderRadius: 18,
             borderWidth: 1,
-            color: '#0F172A',
+            color: theme.colors.text,
             fontSize: 16,
             paddingHorizontal: 16,
             paddingVertical: 14,
@@ -225,14 +226,14 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
           }}
           style={({ pressed }) => ({
             alignItems: 'center',
-            backgroundColor: pressed ? '#0F172A' : '#1E293B',
+            backgroundColor: pressed ? theme.colors.primarySoft : theme.colors.primary,
             borderRadius: 18,
             paddingVertical: 14,
           })}
         >
           <Text
             selectable
-            style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700' }}
+            style={{ color: '#03121D', fontSize: 15, fontWeight: '800' }}
           >
             {mode === 'crypto' ? 'Buscar no CoinGecko' : 'Buscar na brapi.dev'}
           </Text>
@@ -257,8 +258,8 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
               <View
                 key={result.id}
                 style={{
-                  backgroundColor: '#FFFFFF',
-                  borderColor: '#E2E8F0',
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
                   borderRadius: 20,
                   borderWidth: 1,
                   gap: 12,
@@ -275,14 +276,14 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
                   <View style={{ flex: 1, gap: 4 }}>
                     <Text
                       selectable
-                      style={{ color: '#0F172A', fontSize: 18, fontWeight: '700' }}
+                      style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}
                     >
                       {result.symbol}
                     </Text>
-                    <Text selectable style={{ color: '#475569', fontSize: 14 }}>
+                    <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
                       {result.name}
                     </Text>
-                    <Text selectable style={{ color: '#64748B', fontSize: 13 }}>
+                    <Text selectable style={{ color: theme.colors.textSubtle, fontSize: 13 }}>
                       {result.marketCapRank
                         ? `Ranking de mercado #${result.marketCapRank}`
                         : 'Sem ranking disponivel'}
@@ -296,10 +297,10 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
                     }}
                     style={({ pressed }) => ({
                       backgroundColor: isAdded
-                        ? '#DCFCE7'
+                        ? theme.colors.successSoft
                         : pressed
-                          ? '#BFDBFE'
-                          : '#DBEAFE',
+                          ? theme.colors.primarySoft
+                          : theme.colors.surfaceElevated,
                       borderRadius: 999,
                       opacity: isAdding ? 0.7 : 1,
                       paddingHorizontal: 14,
@@ -309,7 +310,7 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
                     <Text
                       selectable
                       style={{
-                        color: isAdded ? '#166534' : '#1D4ED8',
+                        color: isAdded ? theme.colors.success : theme.colors.primary,
                         fontSize: 13,
                         fontWeight: '700',
                       }}
@@ -328,8 +329,8 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
               <View
                 key={result.ticker}
                 style={{
-                  backgroundColor: '#FFFFFF',
-                  borderColor: '#E2E8F0',
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
                   borderRadius: 20,
                   borderWidth: 1,
                   gap: 12,
@@ -346,14 +347,14 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
                   <View style={{ flex: 1, gap: 4 }}>
                     <Text
                       selectable
-                      style={{ color: '#0F172A', fontSize: 18, fontWeight: '700' }}
+                      style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}
                     >
                       {result.ticker}
                     </Text>
-                    <Text selectable style={{ color: '#475569', fontSize: 14 }}>
+                    <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
                       {result.name}
                     </Text>
-                    <Text selectable style={{ color: '#64748B', fontSize: 13 }}>
+                    <Text selectable style={{ color: theme.colors.textSubtle, fontSize: 13 }}>
                       B3
                     </Text>
                   </View>
@@ -365,10 +366,10 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
                     }}
                     style={({ pressed }) => ({
                       backgroundColor: isAdded
-                        ? '#DCFCE7'
+                        ? theme.colors.successSoft
                         : pressed
-                          ? '#BFDBFE'
-                          : '#DBEAFE',
+                          ? theme.colors.primarySoft
+                          : theme.colors.surfaceElevated,
                       borderRadius: 999,
                       opacity: isAdding ? 0.7 : 1,
                       paddingHorizontal: 14,
@@ -378,7 +379,7 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
                     <Text
                       selectable
                       style={{
-                        color: isAdded ? '#166534' : '#1D4ED8',
+                        color: isAdded ? theme.colors.success : theme.colors.primary,
                         fontSize: 13,
                         fontWeight: '700',
                       }}

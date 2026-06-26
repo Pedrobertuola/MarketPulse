@@ -1,5 +1,7 @@
 import { Text, View } from 'react-native';
 
+import { theme } from '../utils';
+
 type EmptyStateProps = {
   title: string;
   message: string;
@@ -10,9 +12,9 @@ export function EmptyState({ title, message }: EmptyStateProps) {
     <View
       style={{
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        borderColor: '#E2E8F0',
-        borderRadius: 20,
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.border,
+        borderRadius: theme.radius.card,
         borderWidth: 1,
         gap: 8,
         padding: 24,
@@ -21,9 +23,9 @@ export function EmptyState({ title, message }: EmptyStateProps) {
       <Text
         selectable
         style={{
-          color: '#0F172A',
+          color: theme.colors.text,
           fontSize: 18,
-          fontWeight: '700',
+          fontWeight: '800',
           textAlign: 'center',
         }}
       >
@@ -32,7 +34,7 @@ export function EmptyState({ title, message }: EmptyStateProps) {
       <Text
         selectable
         style={{
-          color: '#64748B',
+          color: theme.colors.textMuted,
           fontSize: 14,
           lineHeight: 21,
           textAlign: 'center',

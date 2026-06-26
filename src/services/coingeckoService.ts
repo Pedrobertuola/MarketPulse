@@ -1,9 +1,11 @@
 import type { Candle, ChartPoint, CryptoSearchResult, PriceQuote } from '../types';
+import { normalizePriceCandles } from '../utils/normalizeCandles';
 
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
-const DEFAULT_VS_CURRENCY = 'brl';
+const DEFAULT_VS_CURRENCY = 'usd';
 
 type MarketChartDays = 1 | 7 | 14 | 30 | 90 | 180 | 365 | 'max';
+type CryptoDailyCandleDays = 90 | 365;
 
 type SearchResponse = {
   coins?: Array<{
@@ -22,6 +24,11 @@ type SimplePriceResponse = Record<
     brl?: number;
     brl_24h_change?: number;
     brl_24h_vol?: number;
+    brl_market_cap?: number;
+    usd?: number;
+    usd_24h_change?: number;
+    usd_24h_vol?: number;
+    usd_market_cap?: number;
     last_updated_at?: number;
   }
 >;
@@ -89,7 +96,7 @@ function mapQuote(
     price,
     change,
     changePercent: normalizedChangePercent,
-    currency: 'BRL',
+    currency: 'USD',
     updatedAt: lastUpdatedAt
       ? new Date(lastUpdatedAt * 1000).toISOString()
       : new Date().toISOString(),
@@ -124,22 +131,26 @@ export async function getCryptoQuote(id: string): Promise<PriceQuote> {
     vs_currencies: DEFAULT_VS_CURRENCY,
     include_24hr_change: true,
     include_24hr_vol: true,
+    include_market_cap: true,
     include_last_updated_at: true,
     precision: 'full',
   });
 
   const cryptoData = response[id];
 
-  if (!cryptoData || typeof cryptoData.brl !== 'number') {
+  if (!cryptoData || typeof cryptoData.usd !== 'number') {
     throw new CoinGeckoError('Cotacao nao encontrada para a criptomoeda.');
   }
 
-  return mapQuote(
-    cryptoData.brl,
-    cryptoData.brl_24h_change ?? 0,
-    cryptoData.last_updated_at,
-    cryptoData.brl_24h_vol
-  );
+  return {
+    ...mapQuote(
+      cryptoData.usd,
+      cryptoData.usd_24h_change ?? 0,
+      cryptoData.last_updated_at,
+      cryptoData.usd_24h_vol
+    ),
+    marketCap: cryptoData.usd_market_cap,
+  };
 }
 
 export async function getCryptoMarketChart(
@@ -179,4 +190,53 @@ export async function getCryptoOHLC(
     low,
     close,
   }));
+}
+
+export async function getCryptoDailyCandles(
+  id: string,
+  days: CryptoDailyCandleDays
+): Promise<Candle[]> {
+  try {
+    const ohlcCandles = await getCryptoOHLC(id, days);
+
+    if (ohlcCandles.length > 0) {
+      return ohlcCandles;
+    }
+  } catch {
+    // If OHLC is unavailable, fall back to price buckets below. CoinGecko's
+    // OHLC endpoint is preferred because it gives real open/high/low/close.
+  }
+
+  const points = await getCryptoMarketChart(id, days);
+  const sortedPoints = [...points].sort(
+    (left, right) =>
+      new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
+  );
+  const volumeByBucket = new Map<string, number>();
+
+  sortedPoints.forEach((point) => {
+    if (typeof point.volume === 'number') {
+      volumeByBucket.set(getDailyBucketKey(point.timestamp), point.volume);
+    }
+  });
+
+  return normalizePriceCandles(sortedPoints, (point) =>
+    getDailyBucketKey(point.timestamp)
+  ).map((candle) => {
+    const timestamp = new Date(candle.time * 1000).toISOString();
+
+    return {
+      timestamp,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+      volume: volumeByBucket.get(getDailyBucketKey(timestamp)),
+    };
+  });
+}
+
+function getDailyBucketKey(timestamp: string) {
+  const date = new Date(timestamp);
+  return `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`;
 }

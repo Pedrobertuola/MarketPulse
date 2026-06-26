@@ -77,6 +77,31 @@ export async function removeAssetFromWatchlist(assetId: string): Promise<Asset[]
   return updatedWatchlist;
 }
 
+export async function moveAssetInWatchlist(
+  assetId: string,
+  direction: 'up' | 'down'
+): Promise<Asset[]> {
+  const currentWatchlist = await getWatchlist();
+  const currentIndex = currentWatchlist.findIndex((asset) => asset.id === assetId);
+
+  if (currentIndex === -1) {
+    return currentWatchlist;
+  }
+
+  const nextIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+  if (nextIndex < 0 || nextIndex >= currentWatchlist.length) {
+    return currentWatchlist;
+  }
+
+  const updatedWatchlist = [...currentWatchlist];
+  const [movedAsset] = updatedWatchlist.splice(currentIndex, 1);
+  updatedWatchlist.splice(nextIndex, 0, movedAsset);
+
+  await saveWatchlist(updatedWatchlist);
+  return updatedWatchlist;
+}
+
 export async function isAssetInWatchlist(assetId: string): Promise<boolean> {
   const currentWatchlist = await getWatchlist();
   return currentWatchlist.some((asset) => normalizeCryptoId(asset) === assetId);

@@ -13,6 +13,11 @@ export type PriceQuote = {
   currency: 'BRL' | 'USD';
   updatedAt: string;
   volume?: number;
+  marketCap?: number;
+  dayHigh?: number;
+  dayLow?: number;
+  dividendYield?: number;
+  financialVolume?: number;
 };
 
 export type Asset = {

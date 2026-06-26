@@ -4,6 +4,7 @@ import {
   addAssetToWatchlist,
   getWatchlist,
   isAssetInWatchlist,
+  moveAssetInWatchlist,
   removeAssetFromWatchlist,
   saveWatchlist,
 } from '../storage/watchlistStorage';
@@ -15,6 +16,8 @@ type UseWatchlistResult = {
   error: string | null;
   addAsset: (asset: Asset) => Promise<void>;
   removeAsset: (assetId: string) => Promise<void>;
+  moveAsset: (assetId: string, direction: 'up' | 'down') => Promise<void>;
+  reorderAssets: (assets: Asset[]) => Promise<void>;
   containsAsset: (assetId: string) => Promise<boolean>;
   reloadWatchlist: () => Promise<void>;
 };
@@ -70,6 +73,28 @@ export function useWatchlist(initialAssets: Asset[] = []): UseWatchlistResult {
     }
   };
 
+  const moveAsset = async (assetId: string, direction: 'up' | 'down') => {
+    setError(null);
+
+    try {
+      const updatedWatchlist = await moveAssetInWatchlist(assetId, direction);
+      setWatchlist(updatedWatchlist);
+    } catch {
+      setError('Nao foi possivel reordenar a watchlist.');
+    }
+  };
+
+  const reorderAssets = async (assets: Asset[]) => {
+    setError(null);
+
+    try {
+      await saveWatchlist(assets);
+      setWatchlist(assets);
+    } catch {
+      setError('Nao foi possivel reordenar a watchlist.');
+    }
+  };
+
   const containsAsset = async (assetId: string) => {
     return isAssetInWatchlist(assetId);
   };
@@ -80,6 +105,8 @@ export function useWatchlist(initialAssets: Asset[] = []): UseWatchlistResult {
     error,
     addAsset,
     removeAsset,
+    moveAsset,
+    reorderAssets,
     containsAsset,
     reloadWatchlist: loadWatchlist,
   };

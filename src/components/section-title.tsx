@@ -1,5 +1,7 @@
 import { Text, View } from 'react-native';
 
+import { theme } from '../utils';
+
 type SectionTitleProps = {
   title: string;
   subtitle?: string;
@@ -11,9 +13,10 @@ export function SectionTitle({ title, subtitle }: SectionTitleProps) {
       <Text
         selectable
         style={{
-          color: '#0F172A',
-          fontSize: 24,
-          fontWeight: '700',
+          color: theme.colors.text,
+          fontSize: 28,
+          fontWeight: '800',
+          letterSpacing: 0,
         }}
       >
         {title}
@@ -22,7 +25,7 @@ export function SectionTitle({ title, subtitle }: SectionTitleProps) {
         <Text
           selectable
           style={{
-            color: '#475569',
+            color: theme.colors.textMuted,
             fontSize: 15,
             lineHeight: 22,
           }}

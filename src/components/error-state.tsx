@@ -1,5 +1,7 @@
 import { Text, View } from 'react-native';
 
+import { theme } from '../utils';
+
 type ErrorStateProps = {
   title?: string;
   message: string;
@@ -12,9 +14,9 @@ export function ErrorState({
   return (
     <View
       style={{
-        backgroundColor: '#FEF2F2',
-        borderColor: '#FECACA',
-        borderRadius: 20,
+        backgroundColor: theme.colors.dangerSoft,
+        borderColor: '#7F1D1D',
+        borderRadius: theme.radius.card,
         borderWidth: 1,
         gap: 8,
         padding: 20,
@@ -23,9 +25,9 @@ export function ErrorState({
       <Text
         selectable
         style={{
-          color: '#991B1B',
+          color: theme.colors.danger,
           fontSize: 17,
-          fontWeight: '700',
+          fontWeight: '800',
         }}
       >
         {title}
@@ -33,7 +35,7 @@ export function ErrorState({
       <Text
         selectable
         style={{
-          color: '#B91C1C',
+          color: '#FECACA',
           fontSize: 14,
           lineHeight: 21,
         }}

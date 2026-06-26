@@ -1,5 +1,7 @@
 import { ActivityIndicator, Text, View } from 'react-native';
 
+import { theme } from '../utils';
+
 type LoadingStateProps = {
   message?: string;
 };
@@ -11,19 +13,19 @@ export function LoadingState({
     <View
       style={{
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        borderColor: '#E2E8F0',
-        borderRadius: 20,
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.border,
+        borderRadius: theme.radius.card,
         borderWidth: 1,
         gap: 12,
         padding: 24,
       }}
     >
-      <ActivityIndicator color="#0F172A" />
+      <ActivityIndicator color={theme.colors.primary} />
       <Text
         selectable
         style={{
-          color: '#475569',
+          color: theme.colors.textMuted,
           fontSize: 14,
           textAlign: 'center',
         }}

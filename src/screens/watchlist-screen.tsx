@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
 import {
-  AssetCard,
+  DraggableAssetList,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -10,11 +10,13 @@ import {
 } from '../components';
 import { getBrazilianStockQuote, getCryptoQuote } from '../services';
 import type { Asset } from '../types';
+import { theme } from '../utils';
 
 type WatchlistScreenProps = {
   watchlist: Asset[];
   isLoading: boolean;
   error: string | null;
+  onReorderAssets: (assets: Asset[]) => Promise<void>;
   onRemoveAsset: (assetId: string) => Promise<void>;
   onSelectAsset: (asset: Asset) => void;
 };
@@ -23,6 +25,7 @@ export function WatchlistScreen({
   watchlist,
   isLoading,
   error,
+  onReorderAssets,
   onRemoveAsset,
   onSelectAsset,
 }: WatchlistScreenProps) {
@@ -99,17 +102,8 @@ export function WatchlistScreen({
     };
   }, [watchlist]);
 
-  return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{
-        backgroundColor: '#F8FAFC',
-        flexGrow: 1,
-        gap: 24,
-        padding: 24,
-      }}
-      style={{ flex: 1, backgroundColor: '#F8FAFC' }}
-    >
+  const header = (
+    <View style={{ gap: 24 }}>
       <SectionTitle
         title="MarketPulse"
         subtitle="Acompanhe sua watchlist de acoes brasileiras e criptomoedas em um so lugar."
@@ -121,50 +115,81 @@ export function WatchlistScreen({
             alignItems: 'center',
             flexDirection: 'row',
             justifyContent: 'space-between',
+            gap: 12,
           }}
         >
-          <Text
-            selectable
-            style={{
-              color: '#0F172A',
-              fontSize: 16,
-              fontWeight: '600',
-            }}
-          >
-            Minha watchlist
-          </Text>
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text
+              selectable
+              style={{
+                color: theme.colors.text,
+                fontSize: 16,
+                fontWeight: '600',
+              }}
+            >
+              Minha watchlist
+            </Text>
+            <Text
+              selectable
+              style={{ color: theme.colors.textSubtle, fontSize: 12 }}
+            >
+              Toque para abrir detalhes. Segure um card e arraste para ordenar.
+            </Text>
+          </View>
 
           {isRefreshingQuotes ? (
-            <Text selectable style={{ color: '#475569', fontSize: 13 }}>
+            <Text selectable style={{ color: theme.colors.primary, fontSize: 13 }}>
               Atualizando precos...
             </Text>
           ) : null}
         </View>
 
         {refreshError ? <ErrorState message={refreshError} /> : null}
+      </View>
+    </View>
+  );
 
+  if (isLoading || error || displayAssets.length === 0) {
+    return (
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{
+          backgroundColor: theme.colors.background,
+          flexGrow: 1,
+          gap: 24,
+          padding: 24,
+        }}
+        style={{ flex: 1, backgroundColor: theme.colors.background }}
+      >
+        {header}
         {isLoading ? (
           <LoadingState message="Carregando sua watchlist local..." />
         ) : error ? (
           <ErrorState message={error} />
-        ) : displayAssets.length > 0 ? (
-          displayAssets.map((asset) => (
-            <AssetCard
-              key={asset.id}
-              asset={asset}
-              onRemove={(assetId) => {
-                void onRemoveAsset(assetId);
-              }}
-              onPress={onSelectAsset}
-            />
-          ))
         ) : (
           <EmptyState
             title="Nenhum ativo ainda"
             message="Sua watchlist local esta vazia. Os proximos ativos salvos vao aparecer aqui."
           />
         )}
-      </View>
-    </ScrollView>
+      </ScrollView>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <DraggableAssetList
+        assets={displayAssets}
+        listHeader={header}
+        onRemoveAsset={(assetId) => {
+          void onRemoveAsset(assetId);
+        }}
+        onReorderAssets={async (assets) => {
+          setDisplayAssets(assets);
+          await onReorderAssets(assets);
+        }}
+        onSelectAsset={onSelectAsset}
+      />
+    </View>
   );
 }

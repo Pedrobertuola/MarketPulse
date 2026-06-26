@@ -31,6 +31,10 @@ type BrapiQuote = {
   regularMarketTime?: string;
   regularMarketPrice?: number;
   regularMarketVolume?: number;
+  regularMarketDayHigh?: number;
+  regularMarketDayLow?: number;
+  trailingAnnualDividendYield?: number;
+  dividendsYield?: number;
   symbol?: string;
   logourl?: string;
   historicalDataPrice?: Array<{
@@ -115,6 +119,13 @@ function mapQuote(quote: BrapiQuote): PriceQuote {
     currency: quote.currency === 'USD' ? 'USD' : 'BRL',
     updatedAt: quote.regularMarketTime ?? new Date().toISOString(),
     volume: quote.regularMarketVolume,
+    dayHigh: quote.regularMarketDayHigh,
+    dayLow: quote.regularMarketDayLow,
+    dividendYield: quote.dividendsYield ?? quote.trailingAnnualDividendYield,
+    financialVolume:
+      typeof quote.regularMarketVolume === 'number'
+        ? quote.regularMarketVolume * quote.regularMarketPrice
+        : undefined,
   };
 }
 
@@ -189,7 +200,7 @@ export async function getBrazilianStockHistory(
     open: item.open,
     high: item.high,
     low: item.low,
-    close: item.adjustedClose ?? item.close,
+    close: item.close,
     volume: item.volume,
   }));
 }

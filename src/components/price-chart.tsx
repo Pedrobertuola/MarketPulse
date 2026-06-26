@@ -1,6 +1,8 @@
 import { Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
+import { theme } from '../utils';
+
 export type PriceChartPoint = {
   timestamp: string;
   value: number;
@@ -26,16 +28,16 @@ export function PriceChart({ data, color = '#0F766E' }: PriceChartProps) {
       <View
         style={{
           alignItems: 'center',
-          backgroundColor: '#FFFFFF',
-          borderColor: '#E2E8F0',
-          borderRadius: 20,
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.colors.border,
+          borderRadius: theme.radius.card,
           borderWidth: 1,
           height,
           justifyContent: 'center',
           padding: 18,
         }}
       >
-        <Text selectable style={{ color: '#64748B', fontSize: 14 }}>
+        <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
           Dados insuficientes para montar o grafico.
         </Text>
       </View>
@@ -64,9 +66,9 @@ export function PriceChart({ data, color = '#0F766E' }: PriceChartProps) {
   return (
     <View
       style={{
-        backgroundColor: '#FFFFFF',
-        borderColor: '#E2E8F0',
-        borderRadius: 20,
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.border,
+        borderRadius: theme.radius.card,
         borderWidth: 1,
         gap: 10,
         padding: 14,
@@ -79,7 +81,7 @@ export function PriceChart({ data, color = '#0F766E' }: PriceChartProps) {
           return (
             <Line
               key={position}
-              stroke="#E2E8F0"
+              stroke={theme.colors.border}
               strokeDasharray="4 8"
               strokeWidth={1}
               x1={padding}
@@ -100,7 +102,7 @@ export function PriceChart({ data, color = '#0F766E' }: PriceChartProps) {
         <Circle
           cx={lastPoint.x}
           cy={lastPoint.y}
-          fill="#FFFFFF"
+          fill={theme.colors.surface}
           r={5}
           stroke={color}
           strokeWidth={3}

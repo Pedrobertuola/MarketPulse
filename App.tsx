@@ -1,38 +1,50 @@
 import { StatusBar } from 'expo-status-bar';
 import { Pressable, Text, View } from 'react-native';
 import { useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useWatchlist } from './src/hooks';
 import { AssetDetailScreen, SearchScreen, WatchlistScreen } from './src/screens';
 import type { Asset } from './src/types';
-import { mockWatchlistAssets } from './src/utils';
+import { mockWatchlistAssets, theme } from './src/utils';
 
 type TabKey = 'watchlist' | 'search';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>('watchlist');
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-  const { watchlist, isLoading, error, addAsset, removeAsset } =
+  const {
+    watchlist,
+    isLoading,
+    error,
+    addAsset,
+    removeAsset,
+    reorderAssets,
+  } =
     useWatchlist(mockWatchlistAssets);
 
   if (selectedAsset) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
-        <StatusBar style="dark" />
+      <GestureHandlerRootView
+        style={{ flex: 1, backgroundColor: theme.colors.background }}
+      >
+        <StatusBar style="light" />
         <AssetDetailScreen
           asset={selectedAsset}
           onBack={() => setSelectedAsset(null)}
         />
-      </View>
+      </GestureHandlerRootView>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
-      <StatusBar style="dark" />
+    <GestureHandlerRootView
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+    >
+      <StatusBar style="light" />
       <View
         style={{
-          backgroundColor: '#F8FAFC',
+          backgroundColor: theme.colors.background,
           flexDirection: 'row',
           gap: 12,
           paddingHorizontal: 24,
@@ -54,11 +66,11 @@ export default function App() {
               }}
               style={({ pressed }) => ({
                 backgroundColor: isActive
-                  ? '#0F172A'
+                  ? theme.colors.primary
                   : pressed
-                    ? '#E2E8F0'
-                    : '#FFFFFF',
-                borderColor: '#CBD5E1',
+                    ? theme.colors.surfacePressed
+                    : theme.colors.surface,
+                borderColor: isActive ? theme.colors.primary : theme.colors.border,
                 borderRadius: 999,
                 borderWidth: 1,
                 paddingHorizontal: 16,
@@ -68,7 +80,7 @@ export default function App() {
               <Text
                 selectable
                 style={{
-                  color: isActive ? '#FFFFFF' : '#334155',
+                  color: isActive ? '#03121D' : theme.colors.textMuted,
                   fontSize: 14,
                   fontWeight: '700',
                 }}
@@ -84,6 +96,7 @@ export default function App() {
         <WatchlistScreen
           error={error}
           isLoading={isLoading}
+          onReorderAssets={reorderAssets}
           onRemoveAsset={removeAsset}
           onSelectAsset={setSelectedAsset}
           watchlist={watchlist}
@@ -91,6 +104,6 @@ export default function App() {
       ) : (
         <SearchScreen onAddAsset={addAsset} watchlist={watchlist} />
       )}
-    </View>
+    </GestureHandlerRootView>
   );
 }

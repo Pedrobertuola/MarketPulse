@@ -4,14 +4,14 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import {
   EmptyState,
   ErrorState,
+  ChartContainer,
   LoadingState,
-  PriceChart,
   SectionTitle,
 } from '../components';
 import {
   getBrazilianStockHistory,
   getBrazilianStockQuote,
-  getCryptoMarketChart,
+  getCryptoDailyCandles,
   getCryptoQuote,
 } from '../services';
 import {
@@ -19,22 +19,22 @@ import {
   getAlertRulesByAsset,
   removeAlertRule,
 } from '../storage';
-import type { AlertRule, AlertRuleType, Asset, ChartPoint } from '../types';
+import type { AlertRule, AlertRuleType, Asset, Candle } from '../types';
 import {
   calculateBollingerBands,
   calculateRSI,
   calculateSMA,
   type BollingerBandPoint,
+  theme,
 } from '../utils';
 
-type Timeframe = '1D' | '7D' | '1M' | '3M' | '1Y';
+type Timeframe = '1D' | '7D';
 
 type AssetDetailScreenProps = {
   asset: Asset;
   onBack: () => void;
 };
 
-const timeframes: Timeframe[] = ['1D', '7D', '1M', '3M', '1Y'];
 const alertRuleOptions: Array<{ type: AlertRuleType; label: string }> = [
   { type: 'price_above', label: 'Preco acima' },
   { type: 'price_below', label: 'Preco abaixo' },
@@ -42,30 +42,35 @@ const alertRuleOptions: Array<{ type: AlertRuleType; label: string }> = [
   { type: 'rsi_above_70', label: 'RSI acima de 70' },
 ];
 
-const cryptoDaysByTimeframe: Record<Timeframe, 1 | 7 | 30 | 90 | 365> = {
-  '1D': 1,
-  '7D': 7,
-  '1M': 30,
-  '3M': 90,
-  '1Y': 365,
-};
-
-const stockRangeByTimeframe: Record<
-  Timeframe,
-  '1d' | '5d' | '1mo' | '3mo' | '1y'
-> = {
-  '1D': '1d',
-  '7D': '5d',
-  '1M': '1mo',
-  '3M': '3mo',
-  '1Y': '1y',
-};
-
 function formatCurrency(value: number, currency: Asset['quote']['currency']) {
-  return new Intl.NumberFormat('pt-BR', {
+  return new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'pt-BR', {
     style: 'currency',
     currency,
   }).format(value);
+}
+
+function formatCompactCurrency(
+  value: number | undefined,
+  currency: Asset['quote']['currency']
+) {
+  if (typeof value !== 'number') {
+    return 'Indisponivel';
+  }
+
+  return new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'pt-BR', {
+    currency,
+    maximumFractionDigits: 2,
+    notation: 'compact',
+    style: 'currency',
+  }).format(value);
+}
+
+function formatPercent(value?: number) {
+  if (typeof value !== 'number') {
+    return 'Indisponivel';
+  }
+
+  return `${value.toFixed(2)}%`;
 }
 
 function formatVolume(volume?: number) {
@@ -152,9 +157,9 @@ function isAlertRuleActive(
 }
 
 export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
-  const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('7D');
+  const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('1D');
   const [quote, setQuote] = useState(asset.quote);
-  const [chartData, setChartData] = useState<ChartPoint[]>([]);
+  const [candles, setCandles] = useState<Candle[]>([]);
   const [alertRules, setAlertRules] = useState<AlertRule[]>([]);
   const [selectedAlertType, setSelectedAlertType] =
     useState<AlertRuleType>('price_above');
@@ -174,10 +179,7 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
         if (asset.type === 'crypto') {
           const [nextQuote, marketChart] = await Promise.all([
             getCryptoQuote(asset.coingeckoId ?? asset.id),
-            getCryptoMarketChart(
-              asset.coingeckoId ?? asset.id,
-              cryptoDaysByTimeframe[selectedTimeframe]
-            ),
+            getCryptoDailyCandles(asset.coingeckoId ?? asset.id, 365),
           ]);
 
           if (!isMounted) {
@@ -185,14 +187,11 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
           }
 
           setQuote(nextQuote);
-          setChartData(marketChart);
+          setCandles(marketChart);
         } else {
           const [nextQuote, history] = await Promise.all([
             getBrazilianStockQuote(asset.symbol),
-            getBrazilianStockHistory(
-              asset.symbol,
-              stockRangeByTimeframe[selectedTimeframe]
-            ),
+            getBrazilianStockHistory(asset.symbol, '1y'),
           ]);
 
           if (!isMounted) {
@@ -200,18 +199,12 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
           }
 
           setQuote(nextQuote);
-          setChartData(
-            history.map((candle) => ({
-              timestamp: candle.timestamp,
-              price: candle.close,
-              volume: candle.volume,
-            }))
-          );
+          setCandles(history);
         }
       } catch {
         if (isMounted) {
           setError('Nao foi possivel carregar os detalhes desse ativo.');
-          setChartData([]);
+          setCandles([]);
         }
       } finally {
         if (isMounted) {
@@ -225,7 +218,7 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
     return () => {
       isMounted = false;
     };
-  }, [asset, selectedTimeframe]);
+  }, [asset]);
 
   useEffect(() => {
     let isMounted = true;
@@ -246,11 +239,11 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
   }, [asset.id]);
 
   const isPositive = quote.changePercent >= 0;
-  const changeColor = isPositive ? '#15803D' : '#B91C1C';
+  const changeColor = isPositive ? theme.colors.success : theme.colors.danger;
   const formattedVolume = formatVolume(
-    quote.volume ?? chartData[chartData.length - 1]?.volume
+    quote.volume ?? candles[candles.length - 1]?.volume
   );
-  const closePrices = chartData.map((point) => point.price);
+  const closePrices = candles.map((candle) => candle.close);
   const latestRSI = getLatestValue(calculateRSI(closePrices, 14));
   const latestSMA20 = getLatestValue(calculateSMA(closePrices, 20));
   const latestSMA50 = getLatestValue(calculateSMA(closePrices, 50));
@@ -300,19 +293,19 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
-        backgroundColor: '#F8FAFC',
+        backgroundColor: theme.colors.background,
         flexGrow: 1,
         gap: 20,
         padding: 24,
       }}
-      style={{ flex: 1, backgroundColor: '#F8FAFC' }}
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
     >
       <Pressable
         onPress={onBack}
         style={({ pressed }) => ({
           alignSelf: 'flex-start',
-          backgroundColor: pressed ? '#E2E8F0' : '#FFFFFF',
-          borderColor: '#CBD5E1',
+          backgroundColor: pressed ? theme.colors.border : theme.colors.surface,
+          borderColor: theme.colors.border,
           borderRadius: 999,
           borderWidth: 1,
           paddingHorizontal: 14,
@@ -321,7 +314,7 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
       >
         <Text
           selectable
-          style={{ color: '#334155', fontSize: 13, fontWeight: '700' }}
+          style={{ color: theme.colors.textMuted, fontSize: 13, fontWeight: '700' }}
         >
           Voltar
         </Text>
@@ -334,8 +327,8 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
 
       <View
         style={{
-          backgroundColor: '#FFFFFF',
-          borderColor: '#E2E8F0',
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.colors.border,
           borderRadius: 20,
           borderWidth: 1,
           gap: 12,
@@ -345,7 +338,7 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
         <Text
           selectable
           style={{
-            color: '#0F172A',
+            color: theme.colors.text,
             fontSize: 30,
             fontVariant: ['tabular-nums'],
             fontWeight: '800',
@@ -366,64 +359,55 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
           {quote.changePercent.toFixed(2)}%
         </Text>
         {formattedVolume ? (
-          <Text selectable style={{ color: '#475569', fontSize: 14 }}>
+          <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
             Volume: {formattedVolume}
           </Text>
         ) : (
-          <Text selectable style={{ color: '#64748B', fontSize: 14 }}>
+          <Text selectable style={{ color: theme.colors.textSubtle, fontSize: 14 }}>
             Volume indisponivel
           </Text>
         )}
-      </View>
-
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {timeframes.map((timeframe) => {
-          const isSelected = selectedTimeframe === timeframe;
-
-          return (
-            <Pressable
-              key={timeframe}
-              onPress={() => setSelectedTimeframe(timeframe)}
-              style={({ pressed }) => ({
-                backgroundColor: isSelected
-                  ? '#0F172A'
-                  : pressed
-                    ? '#E2E8F0'
-                    : '#FFFFFF',
-                borderColor: '#CBD5E1',
-                borderRadius: 999,
-                borderWidth: 1,
-                paddingHorizontal: 14,
-                paddingVertical: 9,
-              })}
-            >
-              <Text
-                selectable
-                style={{
-                  color: isSelected ? '#FFFFFF' : '#334155',
-                  fontSize: 13,
-                  fontWeight: '700',
-                }}
-              >
-                {timeframe}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {asset.type === 'crypto' ? (
+          <View style={{ gap: 6 }}>
+            <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
+              Var. 24h: {quote.changePercent.toFixed(2)}%
+            </Text>
+            <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
+              Market cap: {formatCompactCurrency(quote.marketCap, 'USD')}
+            </Text>
+            <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
+              Volume negociado: {formatCompactCurrency(quote.volume, 'USD')}
+            </Text>
+          </View>
+        ) : (
+          <View style={{ gap: 6 }}>
+            <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
+              Dividend yield: {formatPercent(quote.dividendYield)}
+            </Text>
+            <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
+              Volume financeiro: {formatCompactCurrency(quote.financialVolume, 'BRL')}
+            </Text>
+            <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
+              Maxima: {quote.dayHigh ? formatCurrency(quote.dayHigh, 'BRL') : 'Indisponivel'}
+            </Text>
+            <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
+              Minima: {quote.dayLow ? formatCurrency(quote.dayLow, 'BRL') : 'Indisponivel'}
+            </Text>
+          </View>
+        )}
       </View>
 
       {isLoading ? (
         <LoadingState message="Carregando historico do ativo..." />
       ) : error ? (
         <ErrorState message={error} />
-      ) : chartData.length > 1 ? (
+      ) : candles.length > 1 ? (
         <>
-          <PriceChart
-            color={isPositive ? '#15803D' : '#B91C1C'}
-            data={chartData.map((point) => ({
-              timestamp: point.timestamp,
-              value: point.price,
-            }))}
+          <ChartContainer
+            candles={candles}
+            currency={quote.currency}
+            onTimeframeChange={setSelectedTimeframe}
+            timeframe={selectedTimeframe}
           />
           <TechnicalIndicatorsSummary
             bollingerBands={latestBollingerBands}
@@ -490,8 +474,8 @@ function AlertRulesPanel({
   return (
     <View
       style={{
-        backgroundColor: '#FFFFFF',
-        borderColor: '#E2E8F0',
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.border,
         borderRadius: 20,
         borderWidth: 1,
         gap: 16,
@@ -500,7 +484,7 @@ function AlertRulesPanel({
     >
       <Text
         selectable
-        style={{ color: '#0F172A', fontSize: 17, fontWeight: '800' }}
+        style={{ color: theme.colors.text, fontSize: 17, fontWeight: '800' }}
       >
         Alertas locais
       </Text>
@@ -515,11 +499,11 @@ function AlertRulesPanel({
               onPress={() => onSelectAlertType(option.type)}
               style={({ pressed }) => ({
                 backgroundColor: isSelected
-                  ? '#0F172A'
+                  ? theme.colors.text
                   : pressed
-                    ? '#E2E8F0'
-                    : '#FFFFFF',
-                borderColor: '#CBD5E1',
+                    ? theme.colors.border
+                    : theme.colors.surface,
+                borderColor: theme.colors.border,
                 borderRadius: 999,
                 borderWidth: 1,
                 paddingHorizontal: 12,
@@ -529,7 +513,7 @@ function AlertRulesPanel({
               <Text
                 selectable
                 style={{
-                  color: isSelected ? '#FFFFFF' : '#334155',
+                  color: isSelected ? '#03121D' : theme.colors.textMuted,
                   fontSize: 13,
                   fontWeight: '700',
                 }}
@@ -548,11 +532,11 @@ function AlertRulesPanel({
           placeholder="Valor do preco"
           placeholderTextColor="#94A3B8"
           style={{
-            backgroundColor: '#F8FAFC',
-            borderColor: '#CBD5E1',
+            backgroundColor: theme.colors.background,
+            borderColor: theme.colors.border,
             borderRadius: 16,
             borderWidth: 1,
-            color: '#0F172A',
+            color: theme.colors.text,
             fontSize: 15,
             paddingHorizontal: 14,
             paddingVertical: 12,
@@ -560,7 +544,7 @@ function AlertRulesPanel({
           value={targetValue}
         />
       ) : (
-        <Text selectable style={{ color: '#475569', fontSize: 14 }}>
+        <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
           O limite deste alerta e fixo pelo RSI selecionado.
         </Text>
       )}
@@ -573,12 +557,12 @@ function AlertRulesPanel({
         }}
         style={({ pressed }) => ({
           alignItems: 'center',
-          backgroundColor: pressed ? '#0F172A' : '#1E293B',
+          backgroundColor: pressed ? theme.colors.text : theme.colors.primary,
           borderRadius: 16,
           paddingVertical: 12,
         })}
       >
-        <Text selectable style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>
+        <Text selectable style={{ color: '#03121D', fontSize: 14, fontWeight: '800' }}>
           Criar alerta
         </Text>
       </Pressable>
@@ -592,8 +576,8 @@ function AlertRulesPanel({
               <View
                 key={alertRule.id}
                 style={{
-                  backgroundColor: isActive ? '#F0FDF4' : '#F8FAFC',
-                  borderColor: isActive ? '#BBF7D0' : '#E2E8F0',
+                  backgroundColor: isActive ? theme.colors.successSoft : theme.colors.background,
+                  borderColor: isActive ? theme.colors.success : theme.colors.border,
                   borderRadius: 16,
                   borderWidth: 1,
                   gap: 10,
@@ -612,7 +596,7 @@ function AlertRulesPanel({
                     <Text
                       selectable
                       style={{
-                        color: '#0F172A',
+                        color: theme.colors.text,
                         fontSize: 14,
                         fontWeight: '800',
                       }}
@@ -622,7 +606,7 @@ function AlertRulesPanel({
                     <Text
                       selectable
                       style={{
-                        color: isActive ? '#15803D' : '#64748B',
+                        color: isActive ? theme.colors.success : theme.colors.textSubtle,
                         fontSize: 13,
                         fontWeight: '700',
                       }}
@@ -636,7 +620,7 @@ function AlertRulesPanel({
                       void onRemoveAlertRule(alertRule.id);
                     }}
                     style={({ pressed }) => ({
-                      backgroundColor: pressed ? '#FEE2E2' : '#FFF1F2',
+                      backgroundColor: pressed ? theme.colors.dangerSoft : theme.colors.dangerSoft,
                       borderRadius: 999,
                       paddingHorizontal: 12,
                       paddingVertical: 8,
@@ -645,7 +629,7 @@ function AlertRulesPanel({
                     <Text
                       selectable
                       style={{
-                        color: '#B91C1C',
+                        color: theme.colors.danger,
                         fontSize: 12,
                         fontWeight: '800',
                       }}
@@ -686,8 +670,8 @@ function TechnicalIndicatorsSummary({
   return (
     <View
       style={{
-        backgroundColor: '#FFFFFF',
-        borderColor: '#E2E8F0',
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.border,
         borderRadius: 20,
         borderWidth: 1,
         gap: 14,
@@ -696,14 +680,14 @@ function TechnicalIndicatorsSummary({
     >
       <Text
         selectable
-        style={{ color: '#0F172A', fontSize: 17, fontWeight: '800' }}
+        style={{ color: theme.colors.text, fontSize: 17, fontWeight: '800' }}
       >
         Indicadores tecnicos
       </Text>
 
       <View style={{ gap: 10 }}>
         <IndicatorRow label="RSI 14" value={formatIndicatorValue(rsi)} />
-        <Text selectable style={{ color: '#475569', fontSize: 14 }}>
+        <Text selectable style={{ color: theme.colors.textMuted, fontSize: 14 }}>
           {getRSIInterpretation(rsi)}
         </Text>
         <IndicatorRow
@@ -727,7 +711,7 @@ function TechnicalIndicatorsSummary({
       <View style={{ gap: 8 }}>
         <Text
           selectable
-          style={{ color: '#334155', fontSize: 14, fontWeight: '700' }}
+          style={{ color: theme.colors.textMuted, fontSize: 14, fontWeight: '700' }}
         >
           Bandas de Bollinger
         </Text>
@@ -775,13 +759,13 @@ function IndicatorRow({ label, value }: IndicatorRowProps) {
         gap: 12,
       }}
     >
-      <Text selectable style={{ color: '#64748B', fontSize: 14 }}>
+      <Text selectable style={{ color: theme.colors.textSubtle, fontSize: 14 }}>
         {label}
       </Text>
       <Text
         selectable
         style={{
-          color: '#0F172A',
+          color: theme.colors.text,
           flexShrink: 1,
           fontSize: 14,
           fontVariant: ['tabular-nums'],
@@ -794,3 +778,4 @@ function IndicatorRow({ label, value }: IndicatorRowProps) {
     </View>
   );
 }
+
