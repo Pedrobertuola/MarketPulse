@@ -184,12 +184,14 @@ function normalizeTicker(ticker: string) {
 function getBrapiRange(timeframe: MarketTimeframe) {
   const ranges: Record<MarketTimeframe, string> = {
     '1D': '2y',
+    '7D': '1mo',
     '1W': '5y',
     '1M': '1mo',
     '3M': '3mo',
     '6M': '6mo',
     '1Y': '1y',
     '2Y': '2y',
+    MAX: 'max',
   };
 
   return ranges[timeframe];

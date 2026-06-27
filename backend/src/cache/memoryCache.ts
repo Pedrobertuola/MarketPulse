@@ -3,22 +3,41 @@ type CacheEntry<T> = {
   expiresAt: number;
 };
 
+type CacheLookup<T> = {
+  value: T;
+  stale: boolean;
+  expiresAt: number;
+};
+
 export class MemoryCache {
   private entries = new Map<string, CacheEntry<unknown>>();
 
   get<T>(key: string): T | null {
+    const entry = this.getEntry<T>(key);
+
+    if (!entry) {
+      return null;
+    }
+
+    if (entry.stale) {
+      return null;
+    }
+
+    return entry.value as T;
+  }
+
+  getEntry<T>(key: string): CacheLookup<T> | null {
     const entry = this.entries.get(key);
 
     if (!entry) {
       return null;
     }
 
-    if (entry.expiresAt <= Date.now()) {
-      this.entries.delete(key);
-      return null;
-    }
-
-    return entry.value as T;
+    return {
+      value: entry.value as T,
+      stale: entry.expiresAt <= Date.now(),
+      expiresAt: entry.expiresAt,
+    };
   }
 
   set<T>(key: string, value: T, ttlMs: number) {

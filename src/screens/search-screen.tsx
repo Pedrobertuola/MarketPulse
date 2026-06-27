@@ -106,7 +106,8 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
         symbol: result.symbol,
         name: result.name,
         type: 'crypto',
-        exchange: 'Finnhub',
+        coingeckoId: marketSymbol,
+        exchange: 'CoinGecko',
         imageUrl: result.imageUrl,
         quote,
       });

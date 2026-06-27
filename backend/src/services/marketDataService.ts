@@ -13,15 +13,21 @@ import {
   searchBrazilianAssets,
 } from './brapiService';
 import {
-  getFinnhubCandles,
-  getFinnhubQuote,
-  resolveFinnhubAsset,
-  searchCrypto,
-} from './finnhubService';
+  getCoinGeckoCandles,
+  getCoinGeckoQuote,
+  resolveCoinGeckoAsset,
+  searchCoinGeckoCrypto,
+} from './coingeckoService';
 
-const quoteCacheTtlMs = 30 * 1000;
-const candlesCacheTtlMs = 5 * 60 * 1000;
+type CachedResult<T> = {
+  value: T;
+  stale: boolean;
+};
+
+const quoteCacheTtlMs = 60 * 1000;
 const searchCacheTtlMs = 5 * 60 * 1000;
+const shortCandlesCacheTtlMs = 5 * 60 * 1000;
+const longCandlesCacheTtlMs = 6 * 60 * 60 * 1000;
 
 export async function searchAssets(
   query: string,
@@ -32,7 +38,7 @@ export async function searchAssets(
     searchCacheTtlMs,
     async () => {
       if (type === 'crypto') {
-        return searchCrypto(query);
+        return searchCoinGeckoCrypto(query);
       }
 
       if (type === 'brazilian_stock') {
@@ -47,86 +53,151 @@ export async function searchAssets(
 export async function getQuote(
   symbol: string,
   type: MarketAssetType
-): Promise<MarketQuote> {
-  return memoryCache.getOrSet(
-    buildCacheKey('quote', symbol, type),
-    quoteCacheTtlMs,
-    async () => {
-      if (type === 'crypto' || type === 'forex' || type === 'global_stock') {
-        logMarketProvider({
-          endpoint: 'quote',
-          provider: 'Finnhub',
-          symbol: resolveFinnhubAsset(symbol, type).symbol,
-          type,
-        });
-        return getFinnhubQuote(symbol, type);
-      }
+): Promise<CachedResult<MarketQuote>> {
+  if (type === 'crypto') {
+    const resolvedAsset = resolveCoinGeckoAsset(symbol);
 
-      if (type === 'brazilian_stock') {
-        logMarketProvider({
-          endpoint: 'quote',
-          provider: 'brapi.dev',
-          symbol,
-          type,
-        });
-        return getBrapiQuote(symbol);
-      }
+    return getCachedMarketData({
+      endpoint: 'quote',
+      key: buildCacheKey('quote', resolvedAsset.id, type),
+      provider: 'coingecko',
+      symbol: resolvedAsset.symbol,
+      type,
+      ttlMs: quoteCacheTtlMs,
+      factory: () => getCoinGeckoQuote(resolvedAsset.id),
+    });
+  }
 
-      throw new MarketDataError('Tipo de ativo nao suportado.', 400);
-    }
-  );
+  if (type === 'brazilian_stock') {
+    return getCachedMarketData({
+      endpoint: 'quote',
+      key: buildCacheKey('quote', symbol, type),
+      provider: 'brapi.dev',
+      symbol,
+      type,
+      ttlMs: quoteCacheTtlMs,
+      factory: () => getBrapiQuote(symbol),
+    });
+  }
+
+  throw new MarketDataError('Tipo de ativo nao suportado.', 400);
 }
 
 export async function getCandles(
   symbol: string,
   type: MarketAssetType,
   timeframe: MarketTimeframe
-): Promise<MarketCandle[]> {
-  return memoryCache.getOrSet(
-    buildCacheKey('candles', symbol, type, timeframe),
-    candlesCacheTtlMs,
-    async () => {
-      if (type === 'crypto' || type === 'forex' || type === 'global_stock') {
-        logMarketProvider({
-          endpoint: 'candles',
-          provider: 'Finnhub',
-          symbol: resolveFinnhubAsset(symbol, type).symbol,
-          timeframe,
-          type,
-        });
-        return getFinnhubCandles(symbol, type, timeframe);
-      }
+): Promise<CachedResult<MarketCandle[]>> {
+  if (type === 'crypto') {
+    const resolvedAsset = resolveCoinGeckoAsset(symbol);
+    const result = await getCoinGeckoCandles(resolvedAsset.id, timeframe);
 
-      if (type === 'brazilian_stock') {
-        logMarketProvider({
-          endpoint: 'candles',
-          provider: 'brapi.dev',
-          symbol,
-          timeframe,
-          type,
-        });
-        return getBrapiCandles(symbol, timeframe);
-      }
+    return {
+      value: result.candles,
+      stale: result.stale,
+    };
+  }
 
-      throw new MarketDataError('Tipo de ativo nao suportado.', 400);
+  if (type === 'brazilian_stock') {
+    return getCachedMarketData({
+      endpoint: 'candles',
+      key: buildCacheKey('candles', symbol, type, timeframe),
+      provider: 'brapi.dev',
+      symbol,
+      timeframe,
+      type,
+      ttlMs: getCandlesCacheTtlMs(timeframe),
+      factory: () => getBrapiCandles(symbol, timeframe),
+    });
+  }
+
+  throw new MarketDataError('Tipo de ativo nao suportado.', 400);
+}
+
+async function getCachedMarketData<T>(params: {
+  endpoint: 'quote' | 'candles';
+  factory: () => Promise<T>;
+  key: string;
+  provider: 'coingecko' | 'brapi.dev';
+  symbol: string;
+  timeframe?: MarketTimeframe;
+  ttlMs: number;
+  type: MarketAssetType;
+}): Promise<CachedResult<T>> {
+  const cachedEntry = memoryCache.getEntry<T>(params.key);
+
+  if (cachedEntry && !cachedEntry.stale) {
+    logMarketProvider({
+      ...params,
+      cacheHit: true,
+    });
+
+    return {
+      value: cachedEntry.value,
+      stale: false,
+    };
+  }
+
+  logMarketProvider({
+    ...params,
+    cacheHit: false,
+  });
+
+  try {
+    const value = await params.factory();
+    memoryCache.set(params.key, value, params.ttlMs);
+
+    return {
+      value,
+      stale: false,
+    };
+  } catch (error) {
+    if (cachedEntry) {
+      console.warn('[market-data] returning stale cache', {
+        endpoint: params.endpoint,
+        provider: params.provider,
+        symbol: params.symbol,
+        timeframe: params.timeframe,
+        type: params.type,
+      });
+
+      return {
+        value: cachedEntry.value,
+        stale: true,
+      };
     }
-  );
+
+    throw error;
+  }
+}
+
+function getCandlesCacheTtlMs(timeframe: MarketTimeframe) {
+  if (timeframe === '1D' || timeframe === '7D' || timeframe === '1W') {
+    return shortCandlesCacheTtlMs;
+  }
+
+  return longCandlesCacheTtlMs;
 }
 
 function logMarketProvider(params: {
+  cacheHit: boolean;
   endpoint: 'quote' | 'candles';
-  provider: 'Finnhub' | 'brapi.dev';
+  provider: 'coingecko' | 'brapi.dev';
   symbol: string;
   type: MarketAssetType;
   timeframe?: MarketTimeframe;
 }) {
-  console.log('[market-data]', {
-    endpoint: params.endpoint,
-    provider: params.provider,
-    symbol: params.symbol,
-    timeframe: params.timeframe,
-    type: params.type,
-  });
+  console.log(
+    [
+      '[market-data]',
+      `provider=${params.provider}`,
+      `endpoint=${params.endpoint}`,
+      `type=${params.type}`,
+      `symbol=${params.symbol}`,
+      `timeframe=${params.timeframe ?? ''}`,
+      `cacheHit=${params.cacheHit}`,
+    ].join(' ')
+  );
 }
 
 function buildCacheKey(
@@ -135,7 +206,7 @@ function buildCacheKey(
   type: MarketAssetType,
   timeframe?: MarketTimeframe
 ) {
-  return [endpoint, symbol.trim().toUpperCase(), type, timeframe ?? '']
+  return [endpoint, symbol.trim().toLowerCase(), type, timeframe ?? '']
     .filter(Boolean)
     .join(':');
 }

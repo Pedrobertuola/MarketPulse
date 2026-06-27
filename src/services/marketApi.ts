@@ -32,6 +32,7 @@ type BackendQuote = {
   dayLow?: number;
   dividendYield?: number;
   financialVolume?: number;
+  stale?: boolean;
 };
 
 type BackendCandle = {
@@ -50,15 +51,25 @@ const API_BASE_URL =
   'http://localhost:3333';
 
 const cryptoSymbolAliases: Record<string, string> = {
-  bitcoin: 'BINANCE:BTCUSDT',
-  btc: 'BINANCE:BTCUSDT',
-  BTC: 'BINANCE:BTCUSDT',
-  ethereum: 'BINANCE:ETHUSDT',
-  eth: 'BINANCE:ETHUSDT',
-  ETH: 'BINANCE:ETHUSDT',
-  solana: 'BINANCE:SOLUSDT',
-  sol: 'BINANCE:SOLUSDT',
-  SOL: 'BINANCE:SOLUSDT',
+  ada: 'cardano',
+  avalanche: 'avalanche-2',
+  avax: 'avalanche-2',
+  bitcoin: 'bitcoin',
+  bnb: 'binancecoin',
+  cardano: 'cardano',
+  chainlink: 'chainlink',
+  doge: 'dogecoin',
+  dogecoin: 'dogecoin',
+  dot: 'polkadot',
+  eth: 'ethereum',
+  ethereum: 'ethereum',
+  link: 'chainlink',
+  polkadot: 'polkadot',
+  ripple: 'ripple',
+  sol: 'solana',
+  solana: 'solana',
+  xrp: 'ripple',
+  btc: 'bitcoin',
 };
 
 export async function searchCrypto(query: string): Promise<CryptoSearchResult[]> {
@@ -103,9 +114,13 @@ export async function getBrazilianStockQuote(symbol: string): Promise<PriceQuote
 
 export async function getCryptoDailyCandles(
   symbol: string,
-  _days: 90 | 365 = 365
+  days: 90 | 365 = 365
 ): Promise<Candle[]> {
-  return getMarketCandles(resolveCryptoMarketSymbol(symbol), 'crypto', '1D');
+  return getMarketCandles(
+    resolveCryptoMarketSymbol(symbol),
+    'crypto',
+    days === 90 ? '3M' : '1Y'
+  );
 }
 
 export async function getBrazilianStockHistory(
@@ -159,8 +174,28 @@ export function resolveAssetMarketSymbol(asset: Asset) {
 }
 
 export function resolveCryptoMarketSymbol(symbol: string) {
-  const trimmedSymbol = symbol.trim();
-  return cryptoSymbolAliases[trimmedSymbol] ?? cryptoSymbolAliases[trimmedSymbol.toLowerCase()] ?? trimmedSymbol.toUpperCase();
+  const normalizedSymbol = symbol.trim().replace(/^crypto:/i, '').toLowerCase();
+  const compactSymbol = normalizedSymbol.replace(/[^a-z0-9]/g, '');
+  const directMatch =
+    cryptoSymbolAliases[normalizedSymbol] ?? cryptoSymbolAliases[compactSymbol];
+
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const embeddedMatch = isLegacyPairSymbol(compactSymbol)
+    ? Object.keys(cryptoSymbolAliases).find((alias) =>
+        compactSymbol.includes(alias)
+      )
+    : undefined;
+
+  return embeddedMatch
+    ? cryptoSymbolAliases[embeddedMatch]
+    : normalizedSymbol;
+}
+
+function isLegacyPairSymbol(symbol: string) {
+  return /(usd|usdt|brl|eur)$/.test(symbol);
 }
 
 function mapQuote(quote: BackendQuote): PriceQuote {
@@ -184,6 +219,7 @@ function mapQuote(quote: BackendQuote): PriceQuote {
     dayLow: quote.dayLow,
     dividendYield: quote.dividendYield,
     financialVolume: quote.financialVolume,
+    stale: quote.stale,
   };
 }
 

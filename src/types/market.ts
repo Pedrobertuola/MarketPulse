@@ -23,6 +23,7 @@ export type PriceQuote = {
   dayLow?: number;
   dividendYield?: number;
   financialVolume?: number;
+  stale?: boolean;
 };
 
 export type Asset = {

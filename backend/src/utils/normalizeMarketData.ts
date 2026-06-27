@@ -1,7 +1,5 @@
 import type {
-  MarketAssetType,
   MarketCandle,
-  MarketCurrency,
   MarketQuote,
   MarketSearchResult,
 } from '../types/marketTypes';
@@ -31,27 +29,6 @@ type BrapiHistoricalPrice = {
   low: number;
   close: number;
   volume?: number;
-};
-
-type FinnhubQuoteLike = {
-  c?: number;
-  d?: number;
-  dp?: number;
-  h?: number;
-  l?: number;
-  o?: number;
-  pc?: number;
-  t?: number;
-};
-
-type FinnhubCandleLike = {
-  c?: number[];
-  h?: number[];
-  l?: number[];
-  o?: number[];
-  s?: string;
-  t?: number[];
-  v?: number[];
 };
 
 export function normalizeBrapiSearchResult(
@@ -113,56 +90,6 @@ export function normalizeBrapiCandles(
       low: item.low,
       close: item.close,
       volume: item.volume,
-    }))
-    .filter(isValidCandle)
-    .sort((left, right) => left.time - right.time);
-}
-
-export function normalizeFinnhubQuote(params: {
-  symbol: string;
-  name: string;
-  type: MarketAssetType;
-  currency: MarketCurrency;
-  quote: FinnhubQuoteLike;
-}): MarketQuote {
-  const price = toFiniteNumber(params.quote.c);
-
-  if (price === null) {
-    throw new Error('Cotacao indisponivel para este simbolo.');
-  }
-
-  return {
-    symbol: params.symbol,
-    name: params.name,
-    type: params.type,
-    currency: params.currency,
-    price,
-    change: params.quote.d,
-    changePercent: params.quote.dp,
-    updatedAt:
-      typeof params.quote.t === 'number' && params.quote.t > 0
-        ? new Date(params.quote.t * 1000).toISOString()
-        : new Date().toISOString(),
-    dayHigh: params.quote.h,
-    dayLow: params.quote.l,
-  };
-}
-
-export function normalizeFinnhubCandles(
-  response: FinnhubCandleLike
-): MarketCandle[] {
-  if (response.s !== 'ok' || !response.t) {
-    return [];
-  }
-
-  return response.t
-    .map((time, index) => ({
-      time,
-      open: response.o?.[index] ?? NaN,
-      high: response.h?.[index] ?? NaN,
-      low: response.l?.[index] ?? NaN,
-      close: response.c?.[index] ?? NaN,
-      volume: response.v?.[index],
     }))
     .filter(isValidCandle)
     .sort((left, right) => left.time - right.time);

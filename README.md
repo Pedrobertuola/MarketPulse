@@ -1,30 +1,37 @@
 # MarketPulse
 
-MarketPulse e um app Expo com TypeScript para acompanhar acoes brasileiras e criptoativos em uma watchlist local. A arquitetura agora usa um backend proprio entre o app e as APIs externas:
+MarketPulse e um app Expo com TypeScript para acompanhar acoes brasileiras e criptoativos em uma watchlist local. A arquitetura usa um backend proprio entre o app e as APIs externas:
 
 ```text
-App MarketPulse -> Backend MarketPulse -> Finnhub / brapi.dev
+App MarketPulse -> Backend MarketPulse -> CoinGecko / brapi.dev
 ```
 
-Essa separacao evita expor tokens no frontend, centraliza normalizacao de dados e reduz chamadas externas com cache simples.
+Essa separacao evita expor tokens no frontend, centraliza a normalizacao dos dados e reduz chamadas externas com cache em memoria.
 
 ## Tecnologias
 
 - Frontend: Expo SDK 56, React Native, TypeScript, AsyncStorage
 - Backend: Node.js, Express, TypeScript
 - Graficos: lightweight-charts no web e fallback nativo
-- Dados externos: Finnhub e brapi.dev
+- Dados externos: CoinGecko e brapi.dev
 
 ## APIs Usadas
 
-- Finnhub: cotacoes e candles de criptomoedas, forex e ativos globais. Criptomoedas sao exibidas em USD.
-- brapi.dev: acoes brasileiras, FIIs, ETFs e BDRs. Ativos B3 sao exibidos em BRL.
+- CoinGecko: cotacoes e historico de criptomoedas em USD.
+- brapi.dev: acoes brasileiras, FIIs, ETFs e BDRs em BRL.
 
-Exemplos de cripto via Finnhub:
+Criptomoedas principais aceitas pelo backend:
 
-- `BINANCE:BTCUSDT`
-- `BINANCE:ETHUSDT`
-- `BINANCE:SOLUSDT`
+- `BTC` -> `bitcoin`
+- `ETH` -> `ethereum`
+- `SOL` -> `solana`
+- `BNB` -> `binancecoin`
+- `XRP` -> `ripple`
+- `ADA` -> `cardano`
+- `DOGE` -> `dogecoin`
+- `AVAX` -> `avalanche-2`
+- `LINK` -> `chainlink`
+- `DOT` -> `polkadot`
 
 Exemplos B3 via brapi.dev:
 
@@ -38,8 +45,8 @@ Exemplos B3 via brapi.dev:
 O backend fica em `backend/` e expoe:
 
 - `GET /api/search?query=BTC&type=crypto`
-- `GET /api/quote?symbol=BINANCE:BTCUSDT&type=crypto`
-- `GET /api/candles?symbol=BINANCE:BTCUSDT&type=crypto&timeframe=1D`
+- `GET /api/quote?symbol=BTC&type=crypto`
+- `GET /api/candles?symbol=BTC&type=crypto&timeframe=1M`
 - `GET /api/quote?symbol=PETR4&type=brazilian_stock`
 - `GET /api/candles?symbol=PETR4&type=brazilian_stock&timeframe=1D`
 
@@ -60,7 +67,7 @@ Formato de quote:
 
 ```json
 {
-  "symbol": "BINANCE:BTCUSDT",
+  "symbol": "BTC",
   "name": "Bitcoin",
   "type": "crypto",
   "currency": "USD",
@@ -70,22 +77,25 @@ Formato de quote:
 }
 ```
 
+Se o provider externo falhar e houver cache anterior, o backend retorna o ultimo dado conhecido com `stale: true`.
+
 ## Cache
 
-O backend usa cache em memoria para reduzir chamadas externas:
+O backend usa cache em memoria para proteger os limites das APIs externas:
 
-- Quotes: 30 segundos
-- Candles: 5 minutos
+- Quotes: 60 segundos
+- Candles `1D`, `7D` e `1W`: 5 minutos
+- Candles `1M`, `3M`, `6M`, `1Y`, `2Y` e `MAX`: 6 horas
 - Busca: 5 minutos
 
 A chave segue o padrao `endpoint + symbol + type + timeframe`.
+Candles de cripto tambem sao persistidos em `backend/.cache/candles.json` para reaproveitar historico ja buscado e consultar apenas ranges faltantes no CoinGecko.
 
 ## Variaveis de Ambiente
 
 Backend: copie `backend/.env.example` para `backend/.env`.
 
 ```bash
-FINNHUB_API_KEY=
 BRAPI_TOKEN=
 PORT=3333
 ```
@@ -96,7 +106,7 @@ Frontend: copie `.env.example` para `.env`.
 EXPO_PUBLIC_API_BASE_URL=http://localhost:3333
 ```
 
-Nao coloque tokens reais no codigo. Tokens ficam apenas no backend.
+Nao coloque tokens reais no codigo. Tokens ficam apenas no backend. Depois de alterar `.env`, reinicie o backend e o servidor Expo.
 
 ## Como Rodar
 
@@ -133,7 +143,7 @@ npm run web
 ## Funcionalidades
 
 - Watchlist local persistida no dispositivo
-- Busca de criptomoedas via backend/Finnhub
+- Busca de criptomoedas via backend/CoinGecko
 - Busca de ativos brasileiros via backend/brapi.dev
 - Tela de detalhe por ativo
 - Grafico candlestick
@@ -147,9 +157,9 @@ npm run web
 
 O backend esconde chaves, reduz chamadas repetidas, normaliza formatos diferentes de APIs externas e deixa o frontend com um contrato unico.
 
-### Por que Finnhub para cripto
+### Por que CoinGecko para cripto
 
-Finnhub permite consultar simbolos globais padronizados, como `BINANCE:BTCUSDT`, e deixa cripto em USD de forma consistente.
+CoinGecko entrega preco atual e historico de mercado para cripto em USD sem depender de candles de exchange dentro do app.
 
 ### Por que brapi.dev para B3
 
@@ -161,6 +171,6 @@ RSI, SMA e Bandas de Bollinger sao calculos deterministas sobre candles normaliz
 
 ## Seguranca
 
-- O frontend nao chama Finnhub nem brapi.dev diretamente.
-- `FINNHUB_API_KEY` e `BRAPI_TOKEN` ficam apenas no backend.
+- O frontend chama apenas o backend MarketPulse.
+- `BRAPI_TOKEN` fica apenas no backend.
 - `.env` nao deve ser versionado.

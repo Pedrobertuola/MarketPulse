@@ -6,7 +6,16 @@ export type MarketAssetType =
 
 export type MarketCurrency = 'USD' | 'BRL';
 
-export type MarketTimeframe = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | '2Y';
+export type MarketTimeframe =
+  | '1D'
+  | '7D'
+  | '1W'
+  | '1M'
+  | '3M'
+  | '6M'
+  | '1Y'
+  | '2Y'
+  | 'MAX';
 
 export type MarketSearchResult = {
   symbol: string;
@@ -32,6 +41,7 @@ export type MarketQuote = {
   dayLow?: number;
   dividendYield?: number;
   financialVolume?: number;
+  stale?: boolean;
 };
 
 export type MarketCandle = {

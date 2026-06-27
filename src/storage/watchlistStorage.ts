@@ -5,15 +5,25 @@ import type { Asset } from '../types';
 const WATCHLIST_STORAGE_KEY = '@marketpulse/watchlist';
 
 const legacyCryptoSymbols: Record<string, string> = {
-  bitcoin: 'BINANCE:BTCUSDT',
-  btc: 'BINANCE:BTCUSDT',
-  BTC: 'BINANCE:BTCUSDT',
-  ethereum: 'BINANCE:ETHUSDT',
-  eth: 'BINANCE:ETHUSDT',
-  ETH: 'BINANCE:ETHUSDT',
-  solana: 'BINANCE:SOLUSDT',
-  sol: 'BINANCE:SOLUSDT',
-  SOL: 'BINANCE:SOLUSDT',
+  ada: 'cardano',
+  avalanche: 'avalanche-2',
+  avax: 'avalanche-2',
+  bitcoin: 'bitcoin',
+  bnb: 'binancecoin',
+  btc: 'bitcoin',
+  cardano: 'cardano',
+  chainlink: 'chainlink',
+  doge: 'dogecoin',
+  dogecoin: 'dogecoin',
+  dot: 'polkadot',
+  eth: 'ethereum',
+  ethereum: 'ethereum',
+  link: 'chainlink',
+  polkadot: 'polkadot',
+  ripple: 'ripple',
+  sol: 'solana',
+  solana: 'solana',
+  xrp: 'ripple',
 };
 
 function normalizeAssetKey(asset: Asset): string {
@@ -22,12 +32,28 @@ function normalizeAssetKey(asset: Asset): string {
   }
 
   const rawSymbol = asset.marketSymbol ?? asset.coingeckoId ?? asset.symbol ?? asset.id;
+  const normalizedSymbol = rawSymbol.trim().replace(/^crypto:/i, '').toLowerCase();
+  const compactSymbol = normalizedSymbol.replace(/[^a-z0-9]/g, '');
+  const directMatch =
+    legacyCryptoSymbols[normalizedSymbol] ?? legacyCryptoSymbols[compactSymbol];
 
-  return (
-    legacyCryptoSymbols[rawSymbol] ??
-    legacyCryptoSymbols[rawSymbol.toLowerCase()] ??
-    rawSymbol.toUpperCase()
-  );
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const embeddedMatch = isLegacyPairSymbol(compactSymbol)
+    ? Object.keys(legacyCryptoSymbols).find((alias) =>
+        compactSymbol.includes(alias)
+      )
+    : undefined;
+
+  return embeddedMatch
+    ? legacyCryptoSymbols[embeddedMatch]
+    : normalizedSymbol;
+}
+
+function isLegacyPairSymbol(symbol: string) {
+  return /(usd|usdt|brl|eur)$/.test(symbol);
 }
 
 function normalizeAsset(asset: Asset): Asset {
@@ -44,7 +70,9 @@ function normalizeAsset(asset: Asset): Asset {
 
   return {
     ...asset,
-    exchange: 'Finnhub',
+    coingeckoId: marketSymbol,
+    exchange: 'CoinGecko',
+    id: `crypto:${marketSymbol}`,
     marketSymbol,
   };
 }

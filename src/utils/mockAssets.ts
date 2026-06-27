@@ -32,12 +32,13 @@ export const mockWatchlistAssets: Asset[] = [
     },
   },
   {
-    id: 'crypto:binance-btcusdt',
-    marketSymbol: 'BINANCE:BTCUSDT',
+    id: 'crypto:bitcoin',
+    marketSymbol: 'bitcoin',
+    coingeckoId: 'bitcoin',
     symbol: 'BTC',
     name: 'Bitcoin',
     type: 'crypto',
-    exchange: 'Finnhub',
+    exchange: 'CoinGecko',
     quote: {
       price: 108250.42,
       change: -956.18,
@@ -49,12 +50,13 @@ export const mockWatchlistAssets: Asset[] = [
     },
   },
   {
-    id: 'crypto:binance-ethusdt',
-    marketSymbol: 'BINANCE:ETHUSDT',
+    id: 'crypto:ethereum',
+    marketSymbol: 'ethereum',
+    coingeckoId: 'ethereum',
     symbol: 'ETH',
     name: 'Ethereum',
     type: 'crypto',
-    exchange: 'Finnhub',
+    exchange: 'CoinGecko',
     quote: {
       price: 3248.93,
       change: 38.12,

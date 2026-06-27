@@ -29,9 +29,9 @@ marketRoutes.get('/quote', async (request, response) => {
   try {
     const symbol = getRequiredString(request.query.symbol, 'symbol');
     const type = parseAssetType(request.query.type);
-    const quote = await getQuote(symbol, type);
+    const { value: quote, stale } = await getQuote(symbol, type);
 
-    response.json({ quote });
+    response.json({ quote: stale ? { ...quote, stale } : quote, stale });
   } catch (error) {
     sendError(response, error);
   }
@@ -42,9 +42,9 @@ marketRoutes.get('/candles', async (request, response) => {
     const symbol = getRequiredString(request.query.symbol, 'symbol');
     const type = parseAssetType(request.query.type);
     const timeframe = parseTimeframe(request.query.timeframe);
-    const candles = await getCandles(symbol, type, timeframe);
+    const { value: candles, stale } = await getCandles(symbol, type, timeframe);
 
-    response.json({ candles });
+    response.json({ candles, stale });
   } catch (error) {
     sendError(response, error);
   }
@@ -74,12 +74,14 @@ function parseAssetType(value: unknown): MarketAssetType {
 function parseTimeframe(value: unknown): MarketTimeframe {
   if (
     value === '1D' ||
+    value === '7D' ||
     value === '1W' ||
     value === '1M' ||
     value === '3M' ||
     value === '6M' ||
     value === '1Y' ||
-    value === '2Y'
+    value === '2Y' ||
+    value === 'MAX'
   ) {
     return value;
   }
