@@ -12,7 +12,6 @@ import {
 } from '../utils/normalizeMarketData';
 
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
-const BINANCE_BASE_URL = 'https://api.binance.com/api/v3';
 
 type FinnhubQuoteResponse = {
   c?: number;
@@ -35,21 +34,6 @@ type FinnhubCandleResponse = {
   v?: number[];
 };
 
-type BinanceKline = [
-  number,
-  string,
-  string,
-  string,
-  string,
-  string,
-  number,
-  string,
-  number,
-  string,
-  string,
-  string,
-];
-
 const cryptoAssets: MarketSearchResult[] = [
   {
     symbol: 'BINANCE:BTCUSDT',
@@ -57,7 +41,7 @@ const cryptoAssets: MarketSearchResult[] = [
     name: 'Bitcoin',
     type: 'crypto',
     currency: 'USD',
-    exchange: 'Binance',
+    exchange: 'Finnhub',
   },
   {
     symbol: 'BINANCE:ETHUSDT',
@@ -65,7 +49,7 @@ const cryptoAssets: MarketSearchResult[] = [
     name: 'Ethereum',
     type: 'crypto',
     currency: 'USD',
-    exchange: 'Binance',
+    exchange: 'Finnhub',
   },
   {
     symbol: 'BINANCE:SOLUSDT',
@@ -73,7 +57,7 @@ const cryptoAssets: MarketSearchResult[] = [
     name: 'Solana',
     type: 'crypto',
     currency: 'USD',
-    exchange: 'Binance',
+    exchange: 'Finnhub',
   },
 ];
 
@@ -119,28 +103,28 @@ export async function getFinnhubCandles(
   const resolvedAsset = resolveFinnhubAsset(symbol, type);
   const range = getFinnhubRange(timeframe);
 
-  try {
-    const response = await fetchFinnhub<FinnhubCandleResponse>(
-      type === 'crypto' ? '/crypto/candle' : '/stock/candle',
-      {
-        symbol: resolvedAsset.symbol,
-        resolution: range.resolution,
-        from: range.from,
-        to: range.to,
-      }
-    );
-
-    return normalizeFinnhubCandles(response);
-  } catch (error) {
-    if (type === 'crypto' && error instanceof MarketDataError && error.status === 403) {
-      return getBinanceCryptoCandles(resolvedAsset.symbol, timeframe);
+  const response = await fetchFinnhub<FinnhubCandleResponse>(
+    type === 'crypto' ? '/crypto/candle' : '/stock/candle',
+    {
+      symbol: resolvedAsset.symbol,
+      resolution: range.resolution,
+      from: range.from,
+      to: range.to,
     }
+  );
+  const candles = normalizeFinnhubCandles(response);
 
-    throw error;
+  if (type === 'crypto' && candles.length === 0) {
+    throw new MarketDataError(
+      'Finnhub nao retornou candles suficientes para esta cripto no plano atual.',
+      422
+    );
   }
+
+  return candles;
 }
 
-function resolveFinnhubAsset(symbol: string, type: MarketAssetType) {
+export function resolveFinnhubAsset(symbol: string, type: MarketAssetType) {
   if (type === 'crypto') {
     const normalizedSymbol = normalizeCryptoSymbol(symbol);
     const knownAsset = cryptoAssets.find((asset) => asset.symbol === normalizedSymbol);
@@ -208,6 +192,13 @@ async function fetchFinnhub<T>(
   }
 
   if (!response.ok) {
+    if (path === '/crypto/candle' && response.status === 403) {
+      throw new MarketDataError(
+        'Finnhub nao liberou candles de cripto para esta chave/plano. Configure um plano com acesso a crypto candles ou desative o grafico historico de cripto.',
+        403
+      );
+    }
+
     throw new MarketDataError(
       `Finnhub respondeu com erro ${response.status}.`,
       response.status
@@ -215,72 +206,6 @@ async function fetchFinnhub<T>(
   }
 
   return (await response.json()) as T;
-}
-
-async function getBinanceCryptoCandles(
-  finnhubSymbol: string,
-  timeframe: MarketTimeframe
-): Promise<MarketCandle[]> {
-  const binanceSymbol = toBinanceSymbol(finnhubSymbol);
-  const range = getBinanceRange(timeframe);
-  const url = new URL(`${BINANCE_BASE_URL}/klines`);
-
-  url.searchParams.set('symbol', binanceSymbol);
-  url.searchParams.set('interval', range.interval);
-  url.searchParams.set('limit', String(range.limit));
-
-  let response: Response;
-
-  try {
-    response = await fetch(url);
-  } catch {
-    throw new MarketDataError('Nao foi possivel conectar a Binance para candles cripto.');
-  }
-
-  if (!response.ok) {
-    throw new MarketDataError(
-      `Binance respondeu com erro ${response.status}.`,
-      response.status
-    );
-  }
-
-  const klines = (await response.json()) as BinanceKline[];
-
-  return klines
-    .map((item) => ({
-      time: Math.floor(item[0] / 1000),
-      open: Number(item[1]),
-      high: Number(item[2]),
-      low: Number(item[3]),
-      close: Number(item[4]),
-      volume: Number(item[5]),
-    }))
-    .filter((candle) =>
-      Number.isFinite(candle.time) &&
-      Number.isFinite(candle.open) &&
-      Number.isFinite(candle.high) &&
-      Number.isFinite(candle.low) &&
-      Number.isFinite(candle.close)
-    )
-    .sort((left, right) => left.time - right.time);
-}
-
-function toBinanceSymbol(finnhubSymbol: string) {
-  return finnhubSymbol.replace(/^BINANCE:/, '').toUpperCase();
-}
-
-function getBinanceRange(timeframe: MarketTimeframe) {
-  const ranges: Record<MarketTimeframe, { interval: string; limit: number }> = {
-    '1D': { interval: '1d', limit: 365 },
-    '1W': { interval: '1w', limit: 260 },
-    '1M': { interval: '1d', limit: 31 },
-    '3M': { interval: '1d', limit: 93 },
-    '6M': { interval: '1d', limit: 186 },
-    '1Y': { interval: '1d', limit: 365 },
-    '2Y': { interval: '1d', limit: 730 },
-  };
-
-  return ranges[timeframe];
 }
 
 function getFinnhubRange(timeframe: MarketTimeframe) {

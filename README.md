@@ -17,8 +17,7 @@ Essa separacao evita expor tokens no frontend, centraliza normalizacao de dados 
 
 ## APIs Usadas
 
-- Finnhub: cotacoes de criptomoedas, forex e ativos globais. Criptomoedas sao exibidas em USD.
-- Binance: fallback de candles OHLC para criptomoedas quando a chave/plano da Finnhub nao libera `/crypto/candle`.
+- Finnhub: cotacoes e candles de criptomoedas, forex e ativos globais. Criptomoedas sao exibidas em USD.
 - brapi.dev: acoes brasileiras, FIIs, ETFs e BDRs. Ativos B3 sao exibidos em BRL.
 
 Exemplos de cripto via Finnhub:
