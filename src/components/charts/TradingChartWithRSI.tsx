@@ -346,24 +346,28 @@ export function TradingChartWithRSI({
         });
       }
 
-      const syncFromCandles = (range: { from: number; to: number } | null) => {
+      const syncTimeRangeFromCandles = (
+        range: { from: Time; to: Time } | null
+      ) => {
         if (!range || !rsiChart || isSyncingRange) {
           return;
         }
 
         isSyncingRange = true;
-        rsiChart.timeScale().setVisibleLogicalRange(range);
+        rsiChart.timeScale().setVisibleRange(range);
         requestAnimationFrame(() => {
           isSyncingRange = false;
         });
       };
-      const syncFromRSI = (range: { from: number; to: number } | null) => {
+      const syncTimeRangeFromRSI = (
+        range: { from: Time; to: Time } | null
+      ) => {
         if (!range || !candleChart || isSyncingRange) {
           return;
         }
 
         isSyncingRange = true;
-        candleChart.timeScale().setVisibleLogicalRange(range);
+        candleChart.timeScale().setVisibleRange(range);
         requestAnimationFrame(() => {
           isSyncingRange = false;
         });
@@ -379,12 +383,7 @@ export function TradingChartWithRSI({
           return;
         }
 
-        const value = rsiByTime.get(Number(param.time));
-
-        if (typeof value !== 'number') {
-          rsiChart.clearCrosshairPosition();
-          return;
-        }
+        const value = rsiByTime.get(Number(param.time)) ?? latestRSI ?? 50;
 
         isSyncingCrosshair = true;
         rsiChart.setCrosshairPosition(value, param.time, rsiSeries);
@@ -419,19 +418,26 @@ export function TradingChartWithRSI({
 
       candleChart
         .timeScale()
-        .subscribeVisibleLogicalRangeChange(syncFromCandles);
-      rsiChart?.timeScale().subscribeVisibleLogicalRangeChange(syncFromRSI);
+        .subscribeVisibleTimeRangeChange(syncTimeRangeFromCandles);
+      rsiChart?.timeScale().subscribeVisibleTimeRangeChange(syncTimeRangeFromRSI);
       candleChart.subscribeCrosshairMove(syncCrosshairFromCandles);
       rsiChart?.subscribeCrosshairMove(syncCrosshairFromRSI);
+      syncRightPriceScaleWidths(candleChart, rsiChart);
 
       const visibleCandles = Math.min(90, candleData.length);
-      const visibleRange = {
-        from: Math.max(candleData.length - visibleCandles, 0),
-        to: candleData.length + 6,
-      };
+      const fromIndex = Math.max(candleData.length - visibleCandles, 0);
+      const visibleTimeRange =
+        candleData[fromIndex] && candleData[candleData.length - 1]
+          ? {
+              from: candleData[fromIndex].time,
+              to: candleData[candleData.length - 1].time,
+            }
+          : null;
 
-      candleChart.timeScale().setVisibleLogicalRange(visibleRange);
-      rsiChart?.timeScale().setVisibleLogicalRange(visibleRange);
+      if (visibleTimeRange) {
+        candleChart.timeScale().setVisibleRange(visibleTimeRange);
+        rsiChart?.timeScale().setVisibleRange(visibleTimeRange);
+      }
     };
 
     void setupCharts();
@@ -445,6 +451,7 @@ export function TradingChartWithRSI({
     candleData,
     candleHeight,
     currency,
+    latestRSI,
     overlayData,
     rsiData,
     rsiHeight,
@@ -658,6 +665,30 @@ function createBaseChartOptions(width: number, height: number) {
       pinch: true,
     },
   };
+}
+
+function syncRightPriceScaleWidths(
+  candleChart: IChartApi,
+  rsiChart: IChartApi | null
+) {
+  if (!rsiChart) {
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    const nextMinimumWidth = Math.max(
+      priceScaleMinimumWidth,
+      candleChart.priceScale('right').width(),
+      rsiChart.priceScale('right').width()
+    );
+
+    candleChart.priceScale('right').applyOptions({
+      minimumWidth: nextMinimumWidth,
+    });
+    rsiChart.priceScale('right').applyOptions({
+      minimumWidth: nextMinimumWidth,
+    });
+  });
 }
 
 function clearElement(element: HTMLElement) {
