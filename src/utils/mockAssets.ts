@@ -5,8 +5,9 @@ export const mockWatchlistAssets: Asset[] = [
     id: 'petr4',
     symbol: 'PETR4',
     name: 'Petrobras PN',
-    type: 'stock',
+    type: 'brazilian_stock',
     exchange: 'B3',
+    marketSymbol: 'PETR4',
     quote: {
       price: 38.42,
       change: 0.81,
@@ -19,8 +20,9 @@ export const mockWatchlistAssets: Asset[] = [
     id: 'vale3',
     symbol: 'VALE3',
     name: 'Vale ON',
-    type: 'stock',
+    type: 'brazilian_stock',
     exchange: 'B3',
+    marketSymbol: 'VALE3',
     quote: {
       price: 56.18,
       change: -0.34,
@@ -30,12 +32,12 @@ export const mockWatchlistAssets: Asset[] = [
     },
   },
   {
-    id: 'bitcoin',
-    coingeckoId: 'bitcoin',
+    id: 'crypto:binance-btcusdt',
+    marketSymbol: 'BINANCE:BTCUSDT',
     symbol: 'BTC',
     name: 'Bitcoin',
     type: 'crypto',
-    exchange: 'CoinGecko',
+    exchange: 'Finnhub',
     quote: {
       price: 108250.42,
       change: -956.18,
@@ -47,12 +49,12 @@ export const mockWatchlistAssets: Asset[] = [
     },
   },
   {
-    id: 'ethereum',
-    coingeckoId: 'ethereum',
+    id: 'crypto:binance-ethusdt',
+    marketSymbol: 'BINANCE:ETHUSDT',
     symbol: 'ETH',
     name: 'Ethereum',
     type: 'crypto',
-    exchange: 'CoinGecko',
+    exchange: 'Finnhub',
     quote: {
       price: 3248.93,
       change: 38.12,

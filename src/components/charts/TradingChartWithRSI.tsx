@@ -31,6 +31,8 @@ type TradingChartWithRSIProps = {
   height?: number;
   overlays?: OverlaySeries[];
   rsiPeriod: number;
+  rsiValues?: Array<number | null>;
+  rsiMovingAverageValues?: Array<number | null>;
   showRSI?: boolean;
 };
 
@@ -40,6 +42,7 @@ type LineSeriesPoint = LineData<Time> | WhitespaceData<Time>;
 
 const defaultHeight = 620;
 const panelGap = 8;
+const priceScaleMinimumWidth = 132;
 
 export function TradingChartWithRSI({
   candles,
@@ -47,6 +50,8 @@ export function TradingChartWithRSI({
   height = defaultHeight,
   overlays = [],
   rsiPeriod,
+  rsiValues,
+  rsiMovingAverageValues,
   showRSI = true,
 }: TradingChartWithRSIProps) {
   const candleContainerRef = useRef<HTMLElement | null>(null);
@@ -79,12 +84,18 @@ export function TradingChartWithRSI({
     [normalizedCandles]
   );
   const rsiData = useMemo(
-    () => buildRSIData(normalizedCandles, rsiPeriod),
-    [normalizedCandles, rsiPeriod]
+    () => buildRSIData(normalizedCandles, rsiPeriod, rsiValues),
+    [normalizedCandles, rsiPeriod, rsiValues]
   );
   const rsiMovingAverageData = useMemo(
-    () => buildMovingAverageData(rsiData, rsiPeriod),
-    [rsiData, rsiPeriod]
+    () =>
+      buildMovingAverageData(
+        normalizedCandles,
+        rsiData,
+        rsiPeriod,
+        rsiMovingAverageValues
+      ),
+    [normalizedCandles, rsiData, rsiMovingAverageValues, rsiPeriod]
   );
   const latestRSI = useMemo(() => {
     for (let index = rsiData.length - 1; index >= 0; index -= 1) {
@@ -254,8 +265,9 @@ export function TradingChartWithRSI({
         wickUpColor: '#22C55E',
       });
       candleSeries.setData(candleData as CandlestickData<Time>[]);
+      candleSeries.setSeriesOrder(0);
 
-      overlayData.forEach((overlay) => {
+      overlayData.forEach((overlay, index) => {
         if (overlay.values.length === 0 || !candleChart) {
           return;
         }
@@ -268,6 +280,7 @@ export function TradingChartWithRSI({
         });
 
         lineSeries.setData(overlay.values);
+        lineSeries.setSeriesOrder(index + 1);
       });
 
       const latestClose = candleData[candleData.length - 1]?.close;
@@ -301,6 +314,7 @@ export function TradingChartWithRSI({
           priceLineVisible: false,
         });
         rsiSeries.setData(rsiData);
+        rsiSeries.setSeriesOrder(0);
         const rsiMovingAverageSeries = rsiChart.addSeries(LineSeries, {
           color: '#FACC15',
           lastValueVisible: true,
@@ -313,6 +327,7 @@ export function TradingChartWithRSI({
           priceLineVisible: false,
         });
         rsiMovingAverageSeries.setData(rsiMovingAverageData);
+        rsiMovingAverageSeries.setSeriesOrder(1);
         rsiSeries.createPriceLine({
           axisLabelVisible: true,
           color: '#94A3B8',
@@ -448,7 +463,11 @@ export function TradingChartWithRSI({
           overlays={overlays}
         />
         {showRSI ? (
-          <NativeRSIFallback candles={candles} rsiPeriod={rsiPeriod} />
+          <NativeRSIFallback
+            candles={candles}
+            rsiPeriod={rsiPeriod}
+            rsiValues={rsiValues}
+          />
         ) : null}
       </View>
     );
@@ -543,29 +562,39 @@ export function TradingChartWithRSI({
   );
 }
 
-function buildRSIData(candles: NormalizedCandle[], period: number) {
+function buildRSIData(
+  candles: NormalizedCandle[],
+  period: number,
+  values?: Array<number | null>
+) {
   const closes = candles.map((candle) => candle.close);
-  const rsiValues = calculateRSI(closes, period);
+  const nextValues =
+    values?.length === candles.length ? values : calculateRSI(closes, period);
 
-  return rsiValues.map((value, index) => {
-    const time = candles[index].time as Time;
-
-    if (typeof value !== 'number') {
-      return { time };
-    }
-
-    return { time, value };
-  });
+  return buildLineData(candles, nextValues);
 }
 
-function buildMovingAverageData(points: LineSeriesPoint[], period: number) {
+function buildMovingAverageData(
+  candles: NormalizedCandle[],
+  points: LineSeriesPoint[],
+  period: number,
+  values?: Array<number | null>
+) {
+  if (values?.length === candles.length) {
+    return buildLineData(candles, values);
+  }
+
   const averages = calculateNullableSMA(
     points.map((point) => ('value' in point ? point.value : null)),
     period
   );
 
-  return averages.map((value, index) => {
-    const time = points[index].time;
+  return buildLineData(candles, averages);
+}
+
+function buildLineData(candles: NormalizedCandle[], values: Array<number | null>) {
+  return values.map((value, index) => {
+    const time = candles[index].time as Time;
 
     if (typeof value !== 'number') {
       return { time };
@@ -603,6 +632,7 @@ function createBaseChartOptions(width: number, height: number) {
     height,
     width,
     layout: {
+      attributionLogo: false,
       background: { color: '#070B12' },
       textColor: '#94A3B8',
     },
@@ -612,6 +642,7 @@ function createBaseChartOptions(width: number, height: number) {
     },
     rightPriceScale: {
       borderColor: '#263348',
+      minimumWidth: priceScaleMinimumWidth,
       visible: true,
     },
     handleScroll: {
@@ -638,14 +669,20 @@ function clearElement(element: HTMLElement) {
 function NativeRSIFallback({
   candles,
   rsiPeriod,
+  rsiValues,
 }: {
   candles: Candle[];
   rsiPeriod: number;
+  rsiValues?: Array<number | null>;
 }) {
-  const values = calculateRSI(
-    normalizeCandles(candles).map((candle) => candle.close),
-    rsiPeriod
-  );
+  const normalizedCandles = normalizeCandles(candles);
+  const values =
+    rsiValues?.length === normalizedCandles.length
+      ? rsiValues
+      : calculateRSI(
+          normalizedCandles.map((candle) => candle.close),
+          rsiPeriod
+        );
   const latest = [...values]
     .reverse()
     .find((value): value is number => typeof value === 'number');

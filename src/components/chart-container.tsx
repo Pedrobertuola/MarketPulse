@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import type { Candle } from '../types';
 import {
   calculateBollingerBands,
+  calculateRSI,
   calculateSMA,
   normalizeCandles,
   theme,
@@ -35,6 +36,16 @@ const defaultIndicators: IndicatorVisibility = {
   sma50: false,
 };
 
+const displayCandleLimits: Record<Timeframe, number> = {
+  '1D': 365,
+  '7D': 52,
+};
+
+const indicatorWarmupCandles: Record<Timeframe, number> = {
+  '1D': 28,
+  '7D': 20,
+};
+
 export function ChartContainer({
   candles,
   currency,
@@ -43,13 +54,21 @@ export function ChartContainer({
 }: ChartContainerProps) {
   const [indicatorVisibility, setIndicatorVisibility] =
     useState(defaultIndicators);
-  const displayCandles = useMemo(
-    () => getDisplayCandles(candles, timeframe),
+  const timeframeCandles = useMemo(
+    () => getTimeframeCandles(candles, timeframe),
     [candles, timeframe]
   );
+  const displayStartIndex = getDisplayStartIndex(
+    timeframeCandles.length,
+    timeframe
+  );
+  const displayCandles = useMemo(
+    () => timeframeCandles.slice(displayStartIndex),
+    [displayStartIndex, timeframeCandles]
+  );
   const closePrices = useMemo(
-    () => displayCandles.map((candle) => candle.close),
-    [displayCandles]
+    () => timeframeCandles.map((candle) => candle.close),
+    [timeframeCandles]
   );
   const sma20 = useMemo(() => calculateSMA(closePrices, 20), [closePrices]);
   const sma50 = useMemo(() => calculateSMA(closePrices, 50), [closePrices]);
@@ -57,41 +76,66 @@ export function ChartContainer({
     () => calculateBollingerBands(closePrices, 20, 2),
     [closePrices]
   );
+  const rsi = useMemo(() => calculateRSI(closePrices, 14), [closePrices]);
+  const rsiMovingAverage = useMemo(
+    () => calculateNullableSMA(rsi, 14),
+    [rsi]
+  );
+  const displaySma20 = useMemo(
+    () => sma20.slice(displayStartIndex),
+    [displayStartIndex, sma20]
+  );
+  const displaySma50 = useMemo(
+    () => sma50.slice(displayStartIndex),
+    [displayStartIndex, sma50]
+  );
+  const displayBollingerBands = useMemo(
+    () => bollingerBands.slice(displayStartIndex),
+    [bollingerBands, displayStartIndex]
+  );
+  const displayRsi = useMemo(
+    () => rsi.slice(displayStartIndex),
+    [displayStartIndex, rsi]
+  );
+  const displayRsiMovingAverage = useMemo(
+    () => rsiMovingAverage.slice(displayStartIndex),
+    [displayStartIndex, rsiMovingAverage]
+  );
   const overlays = useMemo(() => {
     const nextOverlays: Array<{ color: string; values: Array<number | null> }> =
       [];
 
     if (indicatorVisibility.sma20 && !indicatorVisibility.bollinger) {
-      nextOverlays.push({ color: '#3B82F6', values: sma20 });
+      nextOverlays.push({ color: '#3B82F6', values: displaySma20 });
     }
 
     if (indicatorVisibility.sma50) {
-      nextOverlays.push({ color: '#F59E0B', values: sma50 });
+      nextOverlays.push({ color: '#F59E0B', values: displaySma50 });
     }
 
     if (indicatorVisibility.bollinger) {
       nextOverlays.push({
         color: '#EF4444',
-        values: bollingerBands.map((point) => point?.upper ?? null),
+        values: displayBollingerBands.map((point) => point?.upper ?? null),
       });
       nextOverlays.push({
         color: '#3B82F6',
-        values: bollingerBands.map((point) => point?.middle ?? null),
+        values: displayBollingerBands.map((point) => point?.middle ?? null),
       });
       nextOverlays.push({
         color: '#14B8A6',
-        values: bollingerBands.map((point) => point?.lower ?? null),
+        values: displayBollingerBands.map((point) => point?.lower ?? null),
       });
     }
 
     return nextOverlays;
   }, [
-    bollingerBands,
+    displayBollingerBands,
+    displaySma20,
+    displaySma50,
     indicatorVisibility.bollinger,
     indicatorVisibility.sma20,
     indicatorVisibility.sma50,
-    sma20,
-    sma50,
   ]);
 
   return (
@@ -167,13 +211,15 @@ export function ChartContainer({
         height={620}
         overlays={overlays}
         rsiPeriod={14}
+        rsiValues={displayRsi}
+        rsiMovingAverageValues={displayRsiMovingAverage}
         showRSI={indicatorVisibility.rsi}
       />
     </View>
   );
 }
 
-function getDisplayCandles(candles: Candle[], timeframe: Timeframe) {
+function getTimeframeCandles(candles: Candle[], timeframe: Timeframe) {
   const sortedCandles = normalizeCandles(candles).map((candle) => ({
     timestamp: new Date(candle.time * 1000).toISOString(),
     open: candle.open,
@@ -187,6 +233,39 @@ function getDisplayCandles(candles: Candle[], timeframe: Timeframe) {
   }
 
   return sortedCandles;
+}
+
+function getDisplayStartIndex(candleCount: number, timeframe: Timeframe) {
+  const displayLimit = displayCandleLimits[timeframe];
+  const warmupCandles = indicatorWarmupCandles[timeframe];
+
+  if (candleCount > displayLimit + warmupCandles) {
+    return candleCount - displayLimit;
+  }
+
+  return Math.min(warmupCandles, Math.max(candleCount - 1, 0));
+}
+
+function calculateNullableSMA(values: Array<number | null>, period: number) {
+  const result: Array<number | null> = values.map(() => null);
+  const windowValues: number[] = [];
+
+  values.forEach((value, index) => {
+    if (typeof value === 'number') {
+      windowValues.push(value);
+    }
+
+    if (windowValues.length > period) {
+      windowValues.shift();
+    }
+
+    if (windowValues.length === period) {
+      result[index] =
+        windowValues.reduce((sum, item) => sum + item, 0) / period;
+    }
+  });
+
+  return result;
 }
 
 function aggregateWeeklyCandles(candles: Candle[]) {

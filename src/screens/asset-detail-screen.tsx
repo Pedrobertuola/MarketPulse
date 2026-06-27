@@ -13,6 +13,7 @@ import {
   getBrazilianStockQuote,
   getCryptoDailyCandles,
   getCryptoQuote,
+  resolveAssetMarketSymbol,
 } from '../services';
 import {
   addAlertRule,
@@ -156,6 +157,71 @@ function isAlertRuleActive(
   return typeof rsi === 'number' && rsi > 70;
 }
 
+function getErrorMessage(error: unknown, fallbackMessage: string) {
+  return error instanceof Error && error.message ? error.message : fallbackMessage;
+}
+
+function syncLatestCandleWithQuote(candles: Candle[], quote: Asset['quote']) {
+  if (quote.currency !== 'USD' || !Number.isFinite(quote.price)) {
+    return candles;
+  }
+
+  const quoteTimestamp = quote.updatedAt || new Date().toISOString();
+  const quoteBucket = getDailyBucketKey(quoteTimestamp);
+  const sortedCandles = [...candles].sort(
+    (left, right) =>
+      new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
+  );
+  const latestCandle = sortedCandles[sortedCandles.length - 1];
+
+  if (!latestCandle) {
+    return [
+      {
+        timestamp: quoteTimestamp,
+        open: quote.price,
+        high: quote.price,
+        low: quote.price,
+        close: quote.price,
+        volume: quote.volume,
+      },
+    ];
+  }
+
+  if (getDailyBucketKey(latestCandle.timestamp) !== quoteBucket) {
+    return [
+      ...sortedCandles,
+      {
+        timestamp: quoteTimestamp,
+        open: quote.price,
+        high: quote.price,
+        low: quote.price,
+        close: quote.price,
+        volume: quote.volume,
+      },
+    ];
+  }
+
+  return sortedCandles.map((candle, index) => {
+    if (index !== sortedCandles.length - 1) {
+      return candle;
+    }
+
+    return {
+      ...candle,
+      timestamp: quoteTimestamp,
+      high: Math.max(candle.high, quote.price),
+      low: Math.min(candle.low, quote.price),
+      close: quote.price,
+      volume: quote.volume ?? candle.volume,
+    };
+  });
+}
+
+function getDailyBucketKey(timestamp: string) {
+  const date = new Date(timestamp);
+  return `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`;
+}
+
 export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('1D');
   const [quote, setQuote] = useState(asset.quote);
@@ -177,21 +243,38 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
 
       try {
         if (asset.type === 'crypto') {
-          const [nextQuote, marketChart] = await Promise.all([
-            getCryptoQuote(asset.coingeckoId ?? asset.id),
-            getCryptoDailyCandles(asset.coingeckoId ?? asset.id, 365),
-          ]);
+          const marketSymbol = resolveAssetMarketSymbol(asset);
+          const nextQuote = await getCryptoQuote(marketSymbol);
 
           if (!isMounted) {
             return;
           }
 
           setQuote(nextQuote);
-          setCandles(marketChart);
+          try {
+            const marketChart = await getCryptoDailyCandles(marketSymbol, 365);
+
+            if (!isMounted) {
+              return;
+            }
+
+            setCandles(syncLatestCandleWithQuote(marketChart, nextQuote));
+          } catch (historyError) {
+            if (isMounted) {
+              setError(
+                getErrorMessage(
+                  historyError,
+                  'Historico temporariamente indisponivel para este ativo.'
+                )
+              );
+              setCandles([]);
+            }
+          }
         } else {
+          const marketSymbol = resolveAssetMarketSymbol(asset);
           const [nextQuote, history] = await Promise.all([
-            getBrazilianStockQuote(asset.symbol),
-            getBrazilianStockHistory(asset.symbol, '1y'),
+            getBrazilianStockQuote(marketSymbol),
+            getBrazilianStockHistory(marketSymbol, '2y'),
           ]);
 
           if (!isMounted) {
@@ -201,9 +284,14 @@ export function AssetDetailScreen({ asset, onBack }: AssetDetailScreenProps) {
           setQuote(nextQuote);
           setCandles(history);
         }
-      } catch {
+      } catch (loadError) {
         if (isMounted) {
-          setError('Nao foi possivel carregar os detalhes desse ativo.');
+          setError(
+            getErrorMessage(
+              loadError,
+              'Nao foi possivel carregar os detalhes desse ativo.'
+            )
+          );
           setCandles([]);
         }
       } finally {

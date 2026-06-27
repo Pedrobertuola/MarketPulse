@@ -5,6 +5,7 @@ import { EmptyState, ErrorState, LoadingState, SectionTitle } from '../component
 import {
   getBrazilianStockQuote,
   getCryptoQuote,
+  resolveCryptoMarketSymbol,
   searchBrazilianStock,
   searchCrypto,
 } from '../services';
@@ -17,6 +18,10 @@ type SearchScreenProps = {
 };
 
 type SearchMode = 'crypto' | 'stock';
+
+function getErrorMessage(error: unknown, fallbackMessage: string) {
+  return error instanceof Error && error.message ? error.message : fallbackMessage;
+}
 
 export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
   const [query, setQuery] = useState('');
@@ -31,13 +36,15 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
   const watchlistCryptoIds = new Set(
     watchlist
       .filter((asset) => asset.type === 'crypto')
-      .map((asset) => asset.coingeckoId ?? asset.id)
+      .map((asset) =>
+        resolveCryptoMarketSymbol(asset.marketSymbol ?? asset.coingeckoId ?? asset.symbol)
+      )
   );
 
   const watchlistStockTickers = new Set(
     watchlist
-      .filter((asset) => asset.type === 'stock')
-      .map((asset) => asset.symbol.toUpperCase())
+      .filter((asset) => asset.type !== 'crypto')
+      .map((asset) => (asset.marketSymbol ?? asset.symbol).toUpperCase())
   );
 
   const handleSearch = async () => {
@@ -69,11 +76,14 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
         setStockResults(nextResults);
         setResults([]);
       }
-    } catch {
+    } catch (searchError) {
       setError(
-        mode === 'crypto'
-          ? 'Nao foi possivel buscar criptomoedas agora.'
-          : 'Nao foi possivel buscar esse ticker na brapi.dev.'
+        getErrorMessage(
+          searchError,
+          mode === 'crypto'
+            ? 'Nao foi possivel buscar criptomoedas agora.'
+            : 'Nao foi possivel buscar esse ticker agora.'
+        )
       );
       setResults([]);
       setStockResults([]);
@@ -87,20 +97,26 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
     setError(null);
 
     try {
-      const quote = await getCryptoQuote(result.id);
+      const marketSymbol = resolveCryptoMarketSymbol(result.id);
+      const quote = await getCryptoQuote(marketSymbol);
 
       await onAddAsset({
-        id: result.id,
-        coingeckoId: result.id,
+        id: `crypto:${marketSymbol.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+        marketSymbol,
         symbol: result.symbol,
         name: result.name,
         type: 'crypto',
-        exchange: 'CoinGecko',
+        exchange: 'Finnhub',
         imageUrl: result.imageUrl,
         quote,
       });
-    } catch {
-      setError('Nao foi possivel adicionar essa criptomoeda a watchlist.');
+    } catch (addError) {
+      setError(
+        getErrorMessage(
+          addError,
+          'Nao foi possivel adicionar essa criptomoeda a watchlist.'
+        )
+      );
     } finally {
       setAddingAssetId(null);
     }
@@ -115,15 +131,18 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
 
       await onAddAsset({
         id: result.ticker.toLowerCase(),
+        marketSymbol: result.ticker,
         symbol: result.ticker,
         name: result.name,
-        type: 'stock',
+        type: 'brazilian_stock',
         exchange: 'B3',
         imageUrl: result.imageUrl,
         quote,
       });
-    } catch {
-      setError('Nao foi possivel adicionar essa acao a watchlist.');
+    } catch (addError) {
+      setError(
+        getErrorMessage(addError, 'Nao foi possivel adicionar essa acao a watchlist.')
+      );
     } finally {
       setAddingAssetId(null);
     }
@@ -145,7 +164,7 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
     >
       <SectionTitle
         title="Buscar ativos"
-        subtitle="Procure criptomoedas no CoinGecko ou acoes brasileiras por ticker na brapi.dev."
+        subtitle="Procure criptomoedas globais ou acoes brasileiras pelo backend MarketPulse."
       />
 
       <View style={{ gap: 12 }}>
@@ -235,7 +254,7 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
             selectable
             style={{ color: '#03121D', fontSize: 15, fontWeight: '800' }}
           >
-            {mode === 'crypto' ? 'Buscar no CoinGecko' : 'Buscar na brapi.dev'}
+            {mode === 'crypto' ? 'Buscar criptomoedas' : 'Buscar acoes B3'}
           </Text>
         </Pressable>
       </View>
@@ -406,8 +425,8 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
           title={mode === 'crypto' ? 'Busque uma criptomoeda' : 'Busque uma acao'}
           message={
             mode === 'crypto'
-              ? 'Os resultados do CoinGecko vao aparecer aqui quando voce fizer sua primeira busca.'
-              : 'Digite um ticker da B3 para consultar a brapi.dev.'
+              ? 'Os resultados vao aparecer aqui quando voce fizer sua primeira busca.'
+              : 'Digite um ticker da B3 para consultar pelo backend MarketPulse.'
           }
         />
       )}

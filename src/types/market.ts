@@ -1,4 +1,9 @@
-export type AssetType = 'stock' | 'crypto';
+export type AssetType =
+  | 'crypto'
+  | 'brazilian_stock'
+  | 'forex'
+  | 'global_stock'
+  | 'stock';
 
 export type AlertRuleType =
   | 'price_above'
@@ -26,6 +31,7 @@ export type Asset = {
   name: string;
   type: AssetType;
   exchange?: string;
+  marketSymbol?: string;
   coingeckoId?: string;
   imageUrl?: string;
   quote: PriceQuote;
@@ -54,7 +60,7 @@ export type BrazilianStockSearchResult = {
   ticker: string;
   name: string;
   imageUrl?: string;
-  type: 'stock';
+  type: 'brazilian_stock';
 };
 
 export type ChartPoint = {

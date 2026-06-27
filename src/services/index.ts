@@ -1,2 +1,1 @@
-export * from './brapiService';
-export * from './coingeckoService';
+export * from './marketApi';

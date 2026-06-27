@@ -1,101 +1,167 @@
 # MarketPulse
 
-MarketPulse e um app Expo com TypeScript para acompanhar acoes brasileiras e criptomoedas em uma watchlist local. O projeto combina cotacoes, historico de precos, indicadores tecnicos e alertas locais simples em uma interface mobile-first com tema escuro.
+MarketPulse e um app Expo com TypeScript para acompanhar acoes brasileiras e criptoativos em uma watchlist local. A arquitetura agora usa um backend proprio entre o app e as APIs externas:
 
-## Objetivo
+```text
+App MarketPulse -> Backend MarketPulse -> Finnhub / brapi.dev
+```
 
-Criar uma base de aplicativo financeiro clara, organizada e evolutiva para monitorar ativos da B3 e criptoativos sem depender de backend proprio nesta etapa.
+Essa separacao evita expor tokens no frontend, centraliza normalizacao de dados e reduz chamadas externas com cache simples.
 
-## Tecnologias usadas
+## Tecnologias
 
-- Expo SDK 56
-- React Native
-- TypeScript
-- AsyncStorage
-- react-native-svg
-- Fetch API
+- Frontend: Expo SDK 56, React Native, TypeScript, AsyncStorage
+- Backend: Node.js, Express, TypeScript
+- Graficos: lightweight-charts no web e fallback nativo
+- Dados externos: Finnhub e brapi.dev
 
-## APIs usadas
+## APIs Usadas
 
-- CoinGecko: busca, cotacao e historico de criptomoedas.
-- brapi.dev: cotacao e historico de acoes brasileiras.
+- Finnhub: cotacoes de criptomoedas, forex e ativos globais. Criptomoedas sao exibidas em USD.
+- Binance: fallback de candles OHLC para criptomoedas quando a chave/plano da Finnhub nao libera `/crypto/candle`.
+- brapi.dev: acoes brasileiras, FIIs, ETFs e BDRs. Ativos B3 sao exibidos em BRL.
 
-## Funcionalidades
+Exemplos de cripto via Finnhub:
 
-- Watchlist local persistida no dispositivo.
-- Busca de criptomoedas via CoinGecko.
-- Busca de acoes brasileiras por ticker via brapi.dev.
-- Tela de detalhe por ativo.
-- Grafico de linha com historico de precos.
-- Timeframes: 1D, 7D, 1M, 3M e 1Y.
-- Indicadores tecnicos calculados no app: RSI 14, SMA 20, SMA 50 e Bandas de Bollinger.
-- Interpretacao simples do RSI.
-- Alertas locais para preco e RSI, sem notificacoes push ainda.
-- Tema escuro com cards e estados visuais consistentes.
+- `BINANCE:BTCUSDT`
+- `BINANCE:ETHUSDT`
+- `BINANCE:SOLUSDT`
 
-## Screenshots
+Exemplos B3 via brapi.dev:
 
-> Placeholders para imagens do app.
+- `PETR4`
+- `VALE3`
+- `ITUB4`
+- `BBAS3`
 
-| Watchlist | Busca | Detalhes |
-| --- | --- | --- |
-| `docs/screenshots/watchlist.png` | `docs/screenshots/search.png` | `docs/screenshots/details.png` |
+## Backend
 
-## Como rodar
+O backend fica em `backend/` e expoe:
 
-1. Instale as dependencias:
+- `GET /api/search?query=BTC&type=crypto`
+- `GET /api/quote?symbol=BINANCE:BTCUSDT&type=crypto`
+- `GET /api/candles?symbol=BINANCE:BTCUSDT&type=crypto&timeframe=1D`
+- `GET /api/quote?symbol=PETR4&type=brazilian_stock`
+- `GET /api/candles?symbol=PETR4&type=brazilian_stock&timeframe=1D`
+
+Formato de candle:
+
+```json
+{
+  "time": 1719446400,
+  "open": 60000,
+  "high": 61000,
+  "low": 59000,
+  "close": 60500,
+  "volume": 12345
+}
+```
+
+Formato de quote:
+
+```json
+{
+  "symbol": "BINANCE:BTCUSDT",
+  "name": "Bitcoin",
+  "type": "crypto",
+  "currency": "USD",
+  "price": 60500,
+  "changePercent": 1.2,
+  "updatedAt": "2026-06-27T12:00:00.000Z"
+}
+```
+
+## Cache
+
+O backend usa cache em memoria para reduzir chamadas externas:
+
+- Quotes: 30 segundos
+- Candles: 5 minutos
+- Busca: 5 minutos
+
+A chave segue o padrao `endpoint + symbol + type + timeframe`.
+
+## Variaveis de Ambiente
+
+Backend: copie `backend/.env.example` para `backend/.env`.
+
+```bash
+FINNHUB_API_KEY=
+BRAPI_TOKEN=
+PORT=3333
+```
+
+Frontend: copie `.env.example` para `.env`.
+
+```bash
+EXPO_PUBLIC_API_BASE_URL=http://localhost:3333
+```
+
+Nao coloque tokens reais no codigo. Tokens ficam apenas no backend.
+
+## Como Rodar
+
+Instale as dependencias do frontend:
 
 ```bash
 npm install
 ```
 
-2. Configure variaveis de ambiente, se for usar tickers que exigem token da brapi:
+Instale as dependencias do backend:
 
 ```bash
-cp .env.example .env
+npm run backend:install
 ```
 
-3. Preencha `BRAPI_TOKEN` no arquivo `.env`, se tiver uma chave da brapi.
+Rode o backend:
 
-4. Inicie o projeto:
+```bash
+npm run backend:dev
+```
+
+Rode o frontend em outro terminal:
 
 ```bash
 npm start
 ```
 
-5. Abra no Expo Go, emulador, simulador ou web:
+Para web:
 
 ```bash
 npm run web
 ```
 
-## Decisoes tecnicas
+## Funcionalidades
 
-### Por que React Native + Expo
+- Watchlist local persistida no dispositivo
+- Busca de criptomoedas via backend/Finnhub
+- Busca de ativos brasileiros via backend/brapi.dev
+- Tela de detalhe por ativo
+- Grafico candlestick
+- RSI 14, SMA 20, SMA 50 e Bandas de Bollinger
+- Alertas locais para preco e RSI
+- Cache no backend para reduzir consumo das APIs externas
 
-Expo acelera o desenvolvimento mobile com uma base React Native pronta, boa experiencia de desenvolvimento e compatibilidade com iOS, Android e web. Para um app de portfolio, isso permite demonstrar arquitetura, UI e integracoes reais sem gastar a maior parte do tempo com configuracao nativa.
+## Decisoes Tecnicas
 
-### Por que CoinGecko
+### Por que backend proprio
 
-CoinGecko oferece endpoints publicos para busca, cotacao e historico de criptomoedas sem exigir chave para o fluxo basico. Isso facilita validar a experiencia de criptoativos rapidamente e manter o app simples.
+O backend esconde chaves, reduz chamadas repetidas, normaliza formatos diferentes de APIs externas e deixa o frontend com um contrato unico.
 
-### Por que brapi.dev
+### Por que Finnhub para cripto
 
-brapi.dev e focada no mercado brasileiro e fornece dados de acoes da B3, incluindo tickers como PETR4, VALE3, ITUB4 e BBAS3. A integracao tambem permite evoluir para uso autenticado com `BRAPI_TOKEN` sem expor token real no codigo.
+Finnhub permite consultar simbolos globais padronizados, como `BINANCE:BTCUSDT`, e deixa cripto em USD de forma consistente.
 
-### Por que os indicadores sao calculados no app
+### Por que brapi.dev para B3
 
-RSI, SMA e Bandas de Bollinger sao calculos deterministas sobre precos de fechamento. Calcular no app reduz dependencias externas, permite reutilizar o mesmo historico ja carregado e deixa a logica transparente para testes, ajustes e evolucao futura.
+brapi.dev e focada no mercado brasileiro e cobre tickers como PETR4, VALE3, ITUB4 e BBAS3.
 
-## Proximos passos
+### Por que manter indicadores no app
 
-- Adicionar notificacoes locais para alertas ativos.
-- Persistir snapshots de cotacoes para uso offline.
-- Melhorar o grafico com tooltip e linhas dos indicadores.
-- Criar testes automatizados para storage, servicos e indicadores.
-- Adicionar autenticacao opcional para configuracoes pessoais.
-- Criar screenshots reais para substituir os placeholders.
+RSI, SMA e Bandas de Bollinger sao calculos deterministas sobre candles normalizados. Manter no app preserva responsividade e evita depender de indicadores externos.
 
 ## Seguranca
 
-O projeto nao inclui tokens reais. O arquivo `.env.example` documenta `BRAPI_TOKEN`, e `.env` fica ignorado pelo Git.
+- O frontend nao chama Finnhub nem brapi.dev diretamente.
+- `FINNHUB_API_KEY` e `BRAPI_TOKEN` ficam apenas no backend.
+- `.env` nao deve ser versionado.

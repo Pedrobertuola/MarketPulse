@@ -1,7 +1,7 @@
 declare const process:
   | {
       env: {
-        BRAPI_TOKEN?: string;
+        EXPO_PUBLIC_API_BASE_URL?: string;
       };
     }
   | undefined;

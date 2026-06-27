@@ -4,34 +4,48 @@ import type { Asset } from '../types';
 
 const WATCHLIST_STORAGE_KEY = '@marketpulse/watchlist';
 
-function normalizeCryptoId(asset: Asset): string {
+const legacyCryptoSymbols: Record<string, string> = {
+  bitcoin: 'BINANCE:BTCUSDT',
+  btc: 'BINANCE:BTCUSDT',
+  BTC: 'BINANCE:BTCUSDT',
+  ethereum: 'BINANCE:ETHUSDT',
+  eth: 'BINANCE:ETHUSDT',
+  ETH: 'BINANCE:ETHUSDT',
+  solana: 'BINANCE:SOLUSDT',
+  sol: 'BINANCE:SOLUSDT',
+  SOL: 'BINANCE:SOLUSDT',
+};
+
+function normalizeAssetKey(asset: Asset): string {
   if (asset.type !== 'crypto') {
-    return asset.id;
+    return (asset.marketSymbol ?? asset.symbol ?? asset.id).toUpperCase();
   }
 
-  if (asset.coingeckoId) {
-    return asset.coingeckoId;
-  }
+  const rawSymbol = asset.marketSymbol ?? asset.coingeckoId ?? asset.symbol ?? asset.id;
 
-  if (asset.symbol === 'BTC' || asset.id === 'btc') {
-    return 'bitcoin';
-  }
-
-  if (asset.symbol === 'ETH' || asset.id === 'eth') {
-    return 'ethereum';
-  }
-
-  return asset.id;
+  return (
+    legacyCryptoSymbols[rawSymbol] ??
+    legacyCryptoSymbols[rawSymbol.toLowerCase()] ??
+    rawSymbol.toUpperCase()
+  );
 }
 
 function normalizeAsset(asset: Asset): Asset {
   if (asset.type !== 'crypto') {
-    return asset;
+    return {
+      ...asset,
+      id: asset.id,
+      marketSymbol: (asset.marketSymbol ?? asset.symbol).toUpperCase(),
+      type: asset.type === 'stock' ? 'brazilian_stock' : asset.type,
+    };
   }
+
+  const marketSymbol = normalizeAssetKey(asset);
 
   return {
     ...asset,
-    coingeckoId: normalizeCryptoId(asset),
+    exchange: 'Finnhub',
+    marketSymbol,
   };
 }
 
@@ -57,7 +71,7 @@ export async function addAssetToWatchlist(asset: Asset): Promise<Asset[]> {
   const currentWatchlist = await getWatchlist();
   const normalizedAsset = normalizeAsset(asset);
   const alreadyExists = currentWatchlist.some(
-    (currentAsset) => normalizeCryptoId(currentAsset) === normalizeCryptoId(normalizedAsset)
+    (currentAsset) => normalizeAssetKey(currentAsset) === normalizeAssetKey(normalizedAsset)
   );
 
   if (alreadyExists) {
@@ -104,5 +118,5 @@ export async function moveAssetInWatchlist(
 
 export async function isAssetInWatchlist(assetId: string): Promise<boolean> {
   const currentWatchlist = await getWatchlist();
-  return currentWatchlist.some((asset) => normalizeCryptoId(asset) === assetId);
+  return currentWatchlist.some((asset) => normalizeAssetKey(asset) === assetId);
 }

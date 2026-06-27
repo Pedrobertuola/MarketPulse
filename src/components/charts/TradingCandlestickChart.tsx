@@ -28,6 +28,7 @@ type TradingCandlestickChartProps = {
 };
 
 const chartHeight = 420;
+const priceScaleMinimumWidth = 132;
 
 export function TradingCandlestickChart({
   candles,
@@ -111,6 +112,7 @@ export function TradingCandlestickChart({
         height: chartHeight,
         width,
         layout: {
+          attributionLogo: false,
           background: { color: '#070B12' },
           textColor: '#94A3B8',
         },
@@ -120,6 +122,7 @@ export function TradingCandlestickChart({
         },
         rightPriceScale: {
           borderColor: '#263348',
+          minimumWidth: priceScaleMinimumWidth,
           visible: true,
         },
         timeScale: {
@@ -171,8 +174,9 @@ export function TradingCandlestickChart({
       });
 
       candleSeries.setData(chartData as CandlestickData<Time>[]);
+      candleSeries.setSeriesOrder(0);
 
-      overlayData.forEach((overlay) => {
+      overlayData.forEach((overlay, index) => {
         if (overlay.values.length === 0 || !chart) {
           return;
         }
@@ -185,6 +189,7 @@ export function TradingCandlestickChart({
         });
 
         lineSeries.setData(overlay.values);
+        lineSeries.setSeriesOrder(index + 1);
       });
 
       const latestClose = chartData[chartData.length - 1]?.close;

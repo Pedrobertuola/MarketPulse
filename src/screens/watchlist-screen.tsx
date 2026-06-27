@@ -8,7 +8,11 @@ import {
   LoadingState,
   SectionTitle,
 } from '../components';
-import { getBrazilianStockQuote, getCryptoQuote } from '../services';
+import {
+  getBrazilianStockQuote,
+  getCryptoQuote,
+  resolveAssetMarketSymbol,
+} from '../services';
 import type { Asset } from '../types';
 import { theme } from '../utils';
 
@@ -20,6 +24,10 @@ type WatchlistScreenProps = {
   onRemoveAsset: (assetId: string) => Promise<void>;
   onSelectAsset: (asset: Asset) => void;
 };
+
+function getErrorMessage(error: unknown, fallbackMessage: string) {
+  return error instanceof Error && error.message ? error.message : fallbackMessage;
+}
 
 export function WatchlistScreen({
   watchlist,
@@ -40,7 +48,7 @@ export function WatchlistScreen({
       setDisplayAssets(watchlist);
 
       const cryptoAssets = watchlist.filter((asset) => asset.type === 'crypto');
-      const stockAssets = watchlist.filter((asset) => asset.type === 'stock');
+      const stockAssets = watchlist.filter((asset) => asset.type !== 'crypto');
 
       if (cryptoAssets.length === 0 && stockAssets.length === 0) {
         setRefreshError(null);
@@ -56,13 +64,13 @@ export function WatchlistScreen({
           if (asset.type === 'crypto') {
             return {
               assetId: asset.id,
-              quote: await getCryptoQuote(asset.coingeckoId ?? asset.id),
+              quote: await getCryptoQuote(resolveAssetMarketSymbol(asset)),
             };
           }
 
           return {
             assetId: asset.id,
-            quote: await getBrazilianStockQuote(asset.symbol),
+            quote: await getBrazilianStockQuote(resolveAssetMarketSymbol(asset)),
           };
         })
       );
@@ -88,9 +96,16 @@ export function WatchlistScreen({
       setDisplayAssets(updatedAssets);
       setIsRefreshingQuotes(false);
 
-      if (quoteResults.some((result) => result.status === 'rejected')) {
+      const rejectedQuote = quoteResults.find(
+        (result): result is PromiseRejectedResult => result.status === 'rejected'
+      );
+
+      if (rejectedQuote) {
         setRefreshError(
-          'Nem todas as cotacoes puderam ser atualizadas agora.'
+          getErrorMessage(
+            rejectedQuote.reason,
+            'Nem todas as cotacoes puderam ser atualizadas agora.'
+          )
         );
       }
     };
