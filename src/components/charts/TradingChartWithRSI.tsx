@@ -3,9 +3,7 @@ import { Platform, Text, useWindowDimensions, View } from 'react-native';
 import type {
   CandlestickData,
   IChartApi,
-  ISeriesApi,
   LineData,
-  MouseEventParams,
   Time,
   WhitespaceData,
 } from 'lightweight-charts';
@@ -36,13 +34,13 @@ type TradingChartWithRSIProps = {
   showRSI?: boolean;
 };
 
-type CandleSeriesApi = ISeriesApi<'Candlestick', Time>;
-type LineSeriesApi = ISeriesApi<'Line', Time>;
 type LineSeriesPoint = LineData<Time> | WhitespaceData<Time>;
 
 const defaultHeight = 620;
 const panelGap = 8;
 const priceScaleMinimumWidth = 132;
+const mainPaneIndex = 0;
+const rsiPaneIndex = 1;
 
 export function TradingChartWithRSI({
   candles,
@@ -54,19 +52,18 @@ export function TradingChartWithRSI({
   rsiMovingAverageValues,
   showRSI = true,
 }: TradingChartWithRSIProps) {
-  const candleContainerRef = useRef<HTMLElement | null>(null);
-  const rsiContainerRef = useRef<HTMLElement | null>(null);
+  const chartContainerRef = useRef<HTMLElement | null>(null);
   const [useNativeFallback, setUseNativeFallback] = useState(
     Platform.OS !== 'web'
   );
   const { width: windowWidth } = useWindowDimensions();
   const width = Math.max(320, windowWidth - 48);
-  const rsiHeight = showRSI
-    ? Math.min(180, Math.max(140, Math.round(height * 0.28)))
-    : 0;
-  const candleHeight = showRSI
-    ? Math.max(320, height - rsiHeight - panelGap)
-    : Math.max(420, height);
+  const chartHeight = showRSI ? Math.max(500, height) : Math.max(420, height);
+  const paneAreaHeight = showRSI ? Math.max(420, chartHeight - 32) : chartHeight;
+  const mainPaneHeight = showRSI
+    ? Math.round(paneAreaHeight * 0.75)
+    : chartHeight;
+  const rsiPaneHeight = showRSI ? paneAreaHeight - mainPaneHeight : 0;
 
   const normalizedCandles = useMemo(
     () => normalizeCandles(candles),
@@ -152,32 +149,13 @@ export function TradingChartWithRSI({
       return;
     }
 
-    let candleChart: IChartApi | null = null;
-    let rsiChart: IChartApi | null = null;
-    let candleSeries: CandleSeriesApi | null = null;
-    let rsiSeries: LineSeriesApi | null = null;
+    let chart: IChartApi | null = null;
     let isDisposed = false;
-    let isSyncingRange = false;
-    let isSyncingCrosshair = false;
-    const rsiByTime = new Map(
-      rsiData
-        .filter((point): point is LineData<Time> => 'value' in point)
-        .map((point) => [Number(point.time), point.value])
-    );
-    const closeByTime = new Map(
-      candleData.map((point) => [Number(point.time), point.close])
-    );
 
     const setupCharts = async () => {
-      const candleElement = candleContainerRef.current;
-      const rsiElement = rsiContainerRef.current;
+      const chartElement = chartContainerRef.current;
 
-      if (
-        !candleElement ||
-        typeof candleElement.appendChild !== 'function' ||
-        (showRSI &&
-          (!rsiElement || typeof rsiElement.appendChild !== 'function'))
-      ) {
+      if (!chartElement || typeof chartElement.appendChild !== 'function') {
         setUseNativeFallback(true);
         return;
       }
@@ -193,20 +171,16 @@ export function TradingChartWithRSI({
         return;
       }
 
-      clearElement(candleElement);
+      clearElement(chartElement);
 
-      if (showRSI && rsiElement) {
-        clearElement(rsiElement);
-      }
-
-      candleChart = createChart(candleElement, {
-        ...createBaseChartOptions(width, candleHeight),
+      chart = createChart(chartElement, {
+        ...createBaseChartOptions(width, chartHeight),
         timeScale: {
           borderColor: '#263348',
           rightOffset: 8,
           secondsVisible: false,
           timeVisible: true,
-          visible: false,
+          visible: true,
         },
         crosshair: {
           mode: CrosshairMode.Normal,
@@ -219,65 +193,35 @@ export function TradingChartWithRSI({
             labelBackgroundColor: '#111A2C',
           },
         },
-        localization: {
-          priceFormatter: (price: number) => formatPrice(price, currency),
-        },
       });
 
-      if (showRSI && rsiElement) {
-        rsiChart = createChart(rsiElement, {
-          ...createBaseChartOptions(width, rsiHeight),
-          timeScale: {
-            borderColor: '#263348',
-            rightOffset: 8,
-            secondsVisible: false,
-            timeVisible: true,
-            visible: true,
-          },
-          crosshair: {
-            mode: CrosshairMode.Normal,
-            horzLine: {
-              color: '#CBD5E1',
-              labelBackgroundColor: '#111A2C',
-            },
-            vertLine: {
-              color: '#CBD5E1',
-              labelBackgroundColor: '#111A2C',
-            },
-          },
-          localization: {
-            priceFormatter: (price: number) => price.toFixed(2),
-          },
-        });
-      }
-
-      candleSeries = candleChart.addSeries(CandlestickSeries, {
+      const candleSeries = chart.addSeries(CandlestickSeries, {
         borderDownColor: '#F43F5E',
         borderUpColor: '#22C55E',
         downColor: '#F43F5E',
         priceFormat: {
+          formatter: (price: number) => formatPrice(price, currency),
           minMove: 0.01,
-          precision: 2,
-          type: 'price',
+          type: 'custom',
         },
         upColor: '#22C55E',
         wickDownColor: '#F43F5E',
         wickUpColor: '#22C55E',
-      });
+      }, mainPaneIndex);
       candleSeries.setData(candleData as CandlestickData<Time>[]);
       candleSeries.setSeriesOrder(0);
 
       overlayData.forEach((overlay, index) => {
-        if (overlay.values.length === 0 || !candleChart) {
+        if (overlay.values.length === 0 || !chart) {
           return;
         }
 
-        const lineSeries = candleChart.addSeries(LineSeries, {
+        const lineSeries = chart.addSeries(LineSeries, {
           color: overlay.color,
           lastValueVisible: false,
           lineWidth: 2,
           priceLineVisible: false,
-        });
+        }, mainPaneIndex);
 
         lineSeries.setData(overlay.values);
         lineSeries.setSeriesOrder(index + 1);
@@ -295,8 +239,8 @@ export function TradingChartWithRSI({
         });
       }
 
-      if (rsiChart) {
-        rsiSeries = rsiChart.addSeries(LineSeries, {
+      if (showRSI) {
+        const rsiSeries = chart.addSeries(LineSeries, {
           autoscaleInfoProvider: () => ({
             priceRange: {
               minValue: 0,
@@ -312,10 +256,10 @@ export function TradingChartWithRSI({
             type: 'price',
           },
           priceLineVisible: false,
-        });
+        }, rsiPaneIndex);
         rsiSeries.setData(rsiData);
         rsiSeries.setSeriesOrder(0);
-        const rsiMovingAverageSeries = rsiChart.addSeries(LineSeries, {
+        const rsiMovingAverageSeries = chart.addSeries(LineSeries, {
           color: '#FACC15',
           lastValueVisible: true,
           lineWidth: 2,
@@ -325,7 +269,7 @@ export function TradingChartWithRSI({
             type: 'price',
           },
           priceLineVisible: false,
-        });
+        }, rsiPaneIndex);
         rsiMovingAverageSeries.setData(rsiMovingAverageData);
         rsiMovingAverageSeries.setSeriesOrder(1);
         rsiSeries.createPriceLine({
@@ -344,85 +288,8 @@ export function TradingChartWithRSI({
           price: 30,
           title: '30',
         });
+        setPaneHeights(chart, mainPaneHeight, rsiPaneHeight);
       }
-
-      const syncTimeRangeFromCandles = (
-        range: { from: Time; to: Time } | null
-      ) => {
-        if (!range || !rsiChart || isSyncingRange) {
-          return;
-        }
-
-        isSyncingRange = true;
-        rsiChart.timeScale().setVisibleRange(range);
-        requestAnimationFrame(() => {
-          isSyncingRange = false;
-        });
-      };
-      const syncTimeRangeFromRSI = (
-        range: { from: Time; to: Time } | null
-      ) => {
-        if (!range || !candleChart || isSyncingRange) {
-          return;
-        }
-
-        isSyncingRange = true;
-        candleChart.timeScale().setVisibleRange(range);
-        requestAnimationFrame(() => {
-          isSyncingRange = false;
-        });
-      };
-      const syncCrosshairFromCandles = (param: MouseEventParams<Time>) => {
-        if (
-          !param.time ||
-          !rsiChart ||
-          !rsiSeries ||
-          isSyncingCrosshair
-        ) {
-          rsiChart?.clearCrosshairPosition();
-          return;
-        }
-
-        const value = rsiByTime.get(Number(param.time)) ?? latestRSI ?? 50;
-
-        isSyncingCrosshair = true;
-        rsiChart.setCrosshairPosition(value, param.time, rsiSeries);
-        requestAnimationFrame(() => {
-          isSyncingCrosshair = false;
-        });
-      };
-      const syncCrosshairFromRSI = (param: MouseEventParams<Time>) => {
-        if (
-          !param.time ||
-          !candleChart ||
-          !candleSeries ||
-          isSyncingCrosshair
-        ) {
-          candleChart?.clearCrosshairPosition();
-          return;
-        }
-
-        const value = closeByTime.get(Number(param.time));
-
-        if (typeof value !== 'number') {
-          candleChart.clearCrosshairPosition();
-          return;
-        }
-
-        isSyncingCrosshair = true;
-        candleChart.setCrosshairPosition(value, param.time, candleSeries);
-        requestAnimationFrame(() => {
-          isSyncingCrosshair = false;
-        });
-      };
-
-      candleChart
-        .timeScale()
-        .subscribeVisibleTimeRangeChange(syncTimeRangeFromCandles);
-      rsiChart?.timeScale().subscribeVisibleTimeRangeChange(syncTimeRangeFromRSI);
-      candleChart.subscribeCrosshairMove(syncCrosshairFromCandles);
-      rsiChart?.subscribeCrosshairMove(syncCrosshairFromRSI);
-      syncRightPriceScaleWidths(candleChart, rsiChart);
 
       const visibleCandles = Math.min(90, candleData.length);
       const fromIndex = Math.max(candleData.length - visibleCandles, 0);
@@ -435,8 +302,7 @@ export function TradingChartWithRSI({
           : null;
 
       if (visibleTimeRange) {
-        candleChart.timeScale().setVisibleRange(visibleTimeRange);
-        rsiChart?.timeScale().setVisibleRange(visibleTimeRange);
+        chart.timeScale().setVisibleRange(visibleTimeRange);
       }
     };
 
@@ -444,17 +310,16 @@ export function TradingChartWithRSI({
 
     return () => {
       isDisposed = true;
-      candleChart?.remove();
-      rsiChart?.remove();
+      chart?.remove();
     };
   }, [
     candleData,
-    candleHeight,
+    chartHeight,
     currency,
-    latestRSI,
+    mainPaneHeight,
     overlayData,
     rsiData,
-    rsiHeight,
+    rsiPaneHeight,
     rsiMovingAverageData,
     showRSI,
     useNativeFallback,
@@ -489,7 +354,7 @@ export function TradingChartWithRSI({
           borderColor: theme.colors.border,
           borderRadius: theme.radius.card,
           borderWidth: 1,
-          height,
+          height: chartHeight,
           justifyContent: 'center',
           padding: theme.spacing.card,
         }}
@@ -502,67 +367,49 @@ export function TradingChartWithRSI({
   }
 
   return (
-    <View style={{ gap: panelGap }}>
+    <View style={{ height: chartHeight, position: 'relative', width }}>
       <View
         ref={(node) => {
-          candleContainerRef.current = node as unknown as HTMLElement | null;
+          chartContainerRef.current = node as unknown as HTMLElement | null;
         }}
         style={{
           backgroundColor: '#070B12',
           borderColor: theme.colors.border,
-          borderTopLeftRadius: theme.radius.card,
-          borderTopRightRadius: theme.radius.card,
+          borderRadius: theme.radius.card,
           borderWidth: 1,
-          height: candleHeight,
+          height: chartHeight,
           overflow: 'hidden',
           width,
         }}
       />
       {showRSI ? (
-        <View style={{ height: rsiHeight, position: 'relative', width }}>
-          <View
-            ref={(node) => {
-              rsiContainerRef.current = node as unknown as HTMLElement | null;
-            }}
+        <View
+          pointerEvents="none"
+          style={{
+            left: 14,
+            position: 'absolute',
+            right: 14,
+            top: mainPaneHeight + 10,
+          }}
+        >
+          <Text
+            selectable
             style={{
-              backgroundColor: '#070B12',
-              borderBottomLeftRadius: theme.radius.card,
-              borderBottomRightRadius: theme.radius.card,
-              borderColor: theme.colors.border,
-              borderWidth: 1,
-              height: rsiHeight,
-              overflow: 'hidden',
-              width,
-            }}
-          />
-          <View
-            pointerEvents="none"
-            style={{
-              left: 14,
-              position: 'absolute',
-              right: 14,
-              top: 10,
+              color: theme.colors.text,
+              fontSize: 12,
+              fontWeight: '900',
             }}
           >
-            <Text
-              selectable
-              style={{
-                color: theme.colors.text,
-                fontSize: 12,
-                fontWeight: '900',
-              }}
-            >
-              RSI {rsiPeriod}
-              {typeof latestRSI === 'number'
-                ? ` ${latestRSI.toFixed(2)}`
-                : ' --'}
-              {'  '}
-              MA {rsiPeriod}
-              {typeof latestRSIMovingAverage === 'number'
-                ? ` ${latestRSIMovingAverage.toFixed(2)}`
-                : ' --'}
-            </Text>
-          </View>
+            RSI {rsiPeriod}
+            {typeof latestRSI === 'number'
+              ? ` ${latestRSI.toFixed(2)}`
+              : ' --'}
+            {'  '}
+            MA {rsiPeriod}
+            {typeof latestRSIMovingAverage === 'number'
+              ? ` ${latestRSIMovingAverage.toFixed(2)}`
+              : ' --'}
+          </Text>
         </View>
       ) : null}
     </View>
@@ -641,6 +488,11 @@ function createBaseChartOptions(width: number, height: number) {
     layout: {
       attributionLogo: false,
       background: { color: '#070B12' },
+      panes: {
+        enableResize: true,
+        separatorColor: '#263348',
+        separatorHoverColor: 'rgba(56, 189, 248, 0.18)',
+      },
       textColor: '#94A3B8',
     },
     grid: {
@@ -667,27 +519,18 @@ function createBaseChartOptions(width: number, height: number) {
   };
 }
 
-function syncRightPriceScaleWidths(
-  candleChart: IChartApi,
-  rsiChart: IChartApi | null
+function setPaneHeights(
+  chart: IChartApi,
+  mainPaneHeight: number,
+  rsiPaneHeight: number
 ) {
-  if (!rsiChart) {
-    return;
-  }
-
   requestAnimationFrame(() => {
-    const nextMinimumWidth = Math.max(
-      priceScaleMinimumWidth,
-      candleChart.priceScale('right').width(),
-      rsiChart.priceScale('right').width()
-    );
+    const panes = chart.panes();
+    const mainPane = panes[mainPaneIndex];
+    const rsiPane = panes[rsiPaneIndex];
 
-    candleChart.priceScale('right').applyOptions({
-      minimumWidth: nextMinimumWidth,
-    });
-    rsiChart.priceScale('right').applyOptions({
-      minimumWidth: nextMinimumWidth,
-    });
+    mainPane?.setHeight(mainPaneHeight);
+    rsiPane?.setHeight(rsiPaneHeight);
   });
 }
 
