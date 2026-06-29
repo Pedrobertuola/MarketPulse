@@ -1,175 +1,168 @@
 # MarketPulse
 
-MarketPulse e um app Expo com TypeScript para acompanhar acoes brasileiras e criptoativos em uma watchlist local. A arquitetura usa um backend proprio entre o app e as APIs externas:
+> A mobile-first market monitoring app for cryptocurrencies and Brazilian stocks, built with React Native, Expo, TypeScript, and a dedicated Node.js backend.
+
+<!-- Banner asset: replace `docs/assets/marketpulse-banner.png` with a final branded image if needed. -->
+
+![MarketPulse Banner](docs/assets/marketpulse-banner.png)
+
+![React Native](https://img.shields.io/badge/React%20Native-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Expo](https://img.shields.io/badge/Expo-000020?style=for-the-badge&logo=expo&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white)
+![REST API](https://img.shields.io/badge/REST%20API-02569B?style=for-the-badge)
+
+## About
+
+MarketPulse is a mobile application designed for investors and traders who want to monitor cryptocurrencies and Brazilian stocks through a unified interface.
+
+The project focuses on fast market monitoring, technical analysis, a mobile-first experience, and a clean architecture that separates the frontend from external market data providers.
+
+## Features
+
+| Feature | Description |
+| --- | --- |
+| Cryptocurrency monitoring | Track major crypto assets priced in USD. |
+| Brazilian stocks | Monitor B3 assets through brapi.dev. |
+| Interactive candlestick charts | Visualize OHLC price action with technical overlays. |
+| RSI indicator | Analyze momentum with RSI 14 in a dedicated chart pane. |
+| Watchlist | Save and monitor selected assets locally. |
+| Drag & Drop watchlist | Reorder tracked assets with a smooth mobile interaction. |
+| Multiple timeframes | Switch between supported market views. |
+| Backend caching | Reduce external API calls and improve response consistency. |
+| Responsive Web version | Run the app in a browser through Expo Web. |
+| Android application | Built with Android support in mind through Expo. |
+
+## Architecture
 
 ```text
-App MarketPulse -> Backend MarketPulse -> Coinbase / brapi.dev
+Frontend (React Native + Expo)
+        |
+        v
+Node.js Backend (Express REST API)
+        |
+        +--> Coinbase API (Crypto)
+        |
+        +--> brapi.dev (Brazilian Stocks)
 ```
 
-Essa separacao evita expor tokens no frontend, centraliza a normalizacao dos dados e reduz chamadas externas com cache em memoria.
+MarketPulse uses a backend layer instead of calling external APIs directly from the mobile application.
 
-## Tecnologias
+This approach improves:
 
-- Frontend: Expo SDK 56, React Native, TypeScript, AsyncStorage
-- Backend: Node.js, Express, TypeScript
-- Graficos: lightweight-charts no web e fallback nativo
-- Dados externos: Coinbase e brapi.dev
+- **API security**: provider credentials and integration details remain outside the client bundle.
+- **Caching**: repeated market data requests can be served from memory or local backend cache.
+- **Provider abstraction**: the frontend consumes one internal API contract regardless of the upstream provider.
+- **Future migration**: data providers can be replaced without rewriting application screens.
 
-## APIs Usadas
+## Technologies
 
-- Coinbase: cotacoes e candles publicos de criptomoedas em USD.
-- brapi.dev: acoes brasileiras, FIIs, ETFs e BDRs em BRL.
+### Frontend
 
-Criptomoedas principais aceitas pelo backend:
+| Technology | Purpose |
+| --- | --- |
+| React Native | Cross-platform mobile UI. |
+| Expo | Development workflow, Web support, and Android build path. |
+| TypeScript | Static typing across the application. |
+| AsyncStorage | Local watchlist persistence. |
+| Lightweight Charts | Candlestick charts and technical indicator panes. |
+| React Navigation | Mobile navigation architecture. |
 
-- `BTC`
-- `ETH`
-- `SOL`
-- `XRP`
-- `ADA`
-- `DOGE`
-- `AVAX`
-- `LINK`
-- `DOT`
+### Backend
 
-Exemplos B3 via brapi.dev:
+| Technology | Purpose |
+| --- | --- |
+| Node.js | Backend runtime. |
+| Express | REST API server. |
+| TypeScript | Typed backend services and API contracts. |
+| REST API | Internal API consumed by the app. |
+| Environment Variables | Runtime configuration and provider tokens. |
+| Cache Layer | Memory and file-based caching for market data. |
 
-- `PETR4`
-- `VALE3`
-- `ITUB4`
-- `BBAS3`
+## Technical Indicators
 
-## Backend
+Technical indicators are calculated inside the application instead of relying on third-party indicator services. This keeps the charting experience consistent and avoids coupling UI behavior to external APIs.
 
-O backend fica em `backend/` e expoe:
+Supported indicators include:
 
-- `GET /api/search?query=BTC&type=crypto`
-- `GET /api/quote?symbol=BTC&type=crypto`
-- `GET /api/candles?symbol=BTC&type=crypto&timeframe=1M`
-- `GET /api/quote?symbol=PETR4&type=brazilian_stock`
-- `GET /api/candles?symbol=PETR4&type=brazilian_stock&timeframe=1D`
+- **RSI 14**
+- **SMA**
+- **Bollinger Bands**
 
-Formato de candle:
+## Screenshots
 
-```json
-{
-  "time": 1719446400,
-  "open": 60000,
-  "high": 61000,
-  "low": 59000,
-  "close": 60500,
-  "volume": 12345
-}
+| Screen | Preview |
+| --- | --- |
+| Home | `docs/screenshots/home.png` |
+| Watchlist | `docs/screenshots/watchlist.png` |
+| Candlestick Chart | `docs/screenshots/candlestick-chart.png` |
+| RSI | `docs/screenshots/rsi.png` |
+| Search | `docs/screenshots/search.png` |
+
+## Running Locally
+
+### Prerequisites
+
+- Node.js
+- npm
+- Expo CLI workflow
+
+### Environment Variables
+
+Create a frontend `.env` file:
+
+```bash
+EXPO_PUBLIC_API_BASE_URL=http://localhost:3333
 ```
 
-Formato de quote:
-
-```json
-{
-  "symbol": "BTC",
-  "name": "Bitcoin",
-  "type": "crypto",
-  "currency": "USD",
-  "price": 60500,
-  "changePercent": 1.2,
-  "updatedAt": "2026-06-27T12:00:00.000Z"
-}
-```
-
-Se o provider externo falhar e houver cache anterior, o backend retorna o ultimo dado conhecido com `stale: true`.
-
-## Cache
-
-O backend usa cache em memoria para proteger os limites das APIs externas:
-
-- Quotes: 60 segundos
-- Candles `1D`, `7D` e `1W`: 5 minutos
-- Candles `1M`, `3M`, `6M`, `1Y`, `2Y` e `MAX`: 6 horas
-- Busca: 5 minutos
-
-A chave segue o padrao `endpoint + symbol + type + timeframe`.
-Candles de cripto tambem sao persistidos em `backend/.cache/candles.json` para reaproveitar historico ja buscado e reduzir chamadas a Coinbase.
-
-## Variaveis de Ambiente
-
-Backend: copie `backend/.env.example` para `backend/.env`.
+Create a backend `backend/.env` file:
 
 ```bash
 BRAPI_TOKEN=
 PORT=3333
 ```
 
-Frontend: copie `.env.example` para `.env`.
-
-```bash
-EXPO_PUBLIC_API_BASE_URL=http://localhost:3333
-```
-
-Nao coloque tokens reais no codigo. Tokens ficam apenas no backend. Depois de alterar `.env`, reinicie o backend e o servidor Expo.
-
-## Como Rodar
-
-Instale as dependencias do frontend:
+### Install Dependencies
 
 ```bash
 npm install
-```
-
-Instale as dependencias do backend:
-
-```bash
 npm run backend:install
 ```
 
-Rode o backend:
+### Start the Backend
 
 ```bash
 npm run backend:dev
 ```
 
-Rode o frontend em outro terminal:
+### Start the Frontend
 
 ```bash
 npm start
 ```
 
-Para web:
+### Run Web Version
 
 ```bash
 npm run web
 ```
 
-## Funcionalidades
+## Future Improvements
 
-- Watchlist local persistida no dispositivo
-- Busca de criptomoedas via backend/Coinbase
-- Busca de ativos brasileiros via backend/brapi.dev
-- Tela de detalhe por ativo
-- Grafico candlestick
-- RSI 14, SMA 20, SMA 50 e Bandas de Bollinger
-- Alertas locais para preco e RSI
-- Cache no backend para reduzir consumo das APIs externas
+- Push notifications
+- Price alerts
+- MACD indicator
+- EMA indicator
+- Portfolio tracking
+- Market news feed
+- Multi-language support
+- Dark and light themes
 
-## Decisoes Tecnicas
+## Why I Built This
 
-### Por que backend proprio
+I built MarketPulse to create a real-world financial application that demonstrates clean architecture, API integration, data visualization, caching strategies, and mobile development skills in a single product-focused project.
 
-O backend esconde chaves, reduz chamadas repetidas, normaliza formatos diferentes de APIs externas e deixa o frontend com um contrato unico.
+## License
 
-### Por que Coinbase para cripto
-
-Coinbase entrega preco atual e candles publicos de cripto em USD sem exigir chave para os endpoints usados pelo MarketPulse.
-
-### Por que brapi.dev para B3
-
-brapi.dev e focada no mercado brasileiro e cobre tickers como PETR4, VALE3, ITUB4 e BBAS3.
-
-### Por que manter indicadores no app
-
-RSI, SMA e Bandas de Bollinger sao calculos deterministas sobre candles normalizados. Manter no app preserva responsividade e evita depender de indicadores externos.
-
-## Seguranca
-
-- O frontend chama apenas o backend MarketPulse.
-- `BRAPI_TOKEN` fica apenas no backend.
-- `.env` nao deve ser versionado.
+This project is licensed under the MIT License.
