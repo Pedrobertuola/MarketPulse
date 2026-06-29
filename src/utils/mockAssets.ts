@@ -37,7 +37,7 @@ export const mockWatchlistAssets: Asset[] = [
     symbol: 'BTC',
     name: 'Bitcoin',
     type: 'crypto',
-    exchange: 'Alpha Vantage',
+    exchange: 'Coinbase',
     quote: {
       price: 108250.42,
       change: -956.18,
@@ -54,7 +54,7 @@ export const mockWatchlistAssets: Asset[] = [
     symbol: 'ETH',
     name: 'Ethereum',
     type: 'crypto',
-    exchange: 'Alpha Vantage',
+    exchange: 'Coinbase',
     quote: {
       price: 3248.93,
       change: 38.12,

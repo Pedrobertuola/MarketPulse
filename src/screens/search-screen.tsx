@@ -105,7 +105,7 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
         symbol: result.symbol,
         name: result.name,
         type: 'crypto',
-        exchange: 'Alpha Vantage',
+        exchange: 'Coinbase',
         imageUrl: result.imageUrl,
         quote,
       });

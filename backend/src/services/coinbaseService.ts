@@ -11,61 +11,61 @@ import {
   type MarketTimeframe,
 } from '../types/marketTypes';
 
-const ALPHA_VANTAGE_BASE_URL = 'https://www.alphavantage.co/query';
-const USD_MARKET = 'USD';
+const COINBASE_BASE_URL = 'https://api.exchange.coinbase.com';
+const USD_PRODUCT_SUFFIX = 'USD';
+const maxCandlesPerRequest = 300;
 
 type CryptoAsset = {
   name: string;
+  productId: string;
   symbol: string;
 };
 
-type AlphaVantageCandleResult = {
+type CoinbaseCandleResult = {
   candles: MarketCandle[];
   stale: boolean;
 };
 
+type CoinbaseTickerResponse = {
+  ask?: string;
+  bid?: string;
+  price?: string;
+  time?: string;
+  volume?: string;
+};
+
+type CoinbaseCandle = [
+  time: number,
+  low: number,
+  high: number,
+  open: number,
+  close: number,
+  volume: number,
+];
+
 type RequiredCandleRange = {
+  from: number;
+  to: number;
   firstTime: number;
   lastTime: number;
+  granularity: number;
 };
 
-type AlphaVantageExchangeRateResponse = AlphaVantageApiEnvelope & {
-  'Realtime Currency Exchange Rate'?: {
-    '1. From_Currency Code'?: string;
-    '2. From_Currency Name'?: string;
-    '3. To_Currency Code'?: string;
-    '4. To_Currency Name'?: string;
-    '5. Exchange Rate'?: string;
-    '6. Last Refreshed'?: string;
-    '8. Bid Price'?: string;
-    '9. Ask Price'?: string;
-  };
-};
-
-type AlphaVantageDailyResponse = AlphaVantageApiEnvelope & {
-  'Time Series (Digital Currency Daily)'?: Record<
-    string,
-    Record<string, string>
-  >;
-};
-
-type AlphaVantageApiEnvelope = {
-  'Error Message'?: string;
-  Information?: string;
-  Note?: string;
+type MissingCandleRange = {
+  from: number;
+  to: number;
 };
 
 const knownCryptoAssets: CryptoAsset[] = [
-  { symbol: 'BTC', name: 'Bitcoin' },
-  { symbol: 'ETH', name: 'Ethereum' },
-  { symbol: 'SOL', name: 'Solana' },
-  { symbol: 'BNB', name: 'BNB' },
-  { symbol: 'XRP', name: 'XRP' },
-  { symbol: 'ADA', name: 'Cardano' },
-  { symbol: 'DOGE', name: 'Dogecoin' },
-  { symbol: 'AVAX', name: 'Avalanche' },
-  { symbol: 'LINK', name: 'Chainlink' },
-  { symbol: 'DOT', name: 'Polkadot' },
+  { symbol: 'BTC', productId: 'BTC-USD', name: 'Bitcoin' },
+  { symbol: 'ETH', productId: 'ETH-USD', name: 'Ethereum' },
+  { symbol: 'SOL', productId: 'SOL-USD', name: 'Solana' },
+  { symbol: 'XRP', productId: 'XRP-USD', name: 'XRP' },
+  { symbol: 'ADA', productId: 'ADA-USD', name: 'Cardano' },
+  { symbol: 'DOGE', productId: 'DOGE-USD', name: 'Dogecoin' },
+  { symbol: 'AVAX', productId: 'AVAX-USD', name: 'Avalanche' },
+  { symbol: 'LINK', productId: 'LINK-USD', name: 'Chainlink' },
+  { symbol: 'DOT', productId: 'DOT-USD', name: 'Polkadot' },
 ];
 
 const cryptoAliases: Record<string, string> = {
@@ -74,8 +74,6 @@ const cryptoAliases: Record<string, string> = {
   'avalanche-2': 'AVAX',
   avax: 'AVAX',
   bitcoin: 'BTC',
-  binancecoin: 'BNB',
-  bnb: 'BNB',
   btc: 'BTC',
   cardano: 'ADA',
   chainlink: 'LINK',
@@ -92,7 +90,7 @@ const cryptoAliases: Record<string, string> = {
   xrp: 'XRP',
 };
 
-export function searchAlphaVantageCrypto(query: string): MarketSearchResult[] {
+export function searchCoinbaseCrypto(query: string): MarketSearchResult[] {
   const normalizedQuery = query.trim().toLowerCase();
 
   if (!normalizedQuery) {
@@ -108,23 +106,15 @@ export function searchAlphaVantageCrypto(query: string): MarketSearchResult[] {
     .map(toSearchResult);
 }
 
-export async function getAlphaVantageQuote(
-  symbol: string
-): Promise<MarketQuote> {
-  const asset = resolveAlphaVantageAsset(symbol);
-  const response = await fetchAlphaVantage<AlphaVantageExchangeRateResponse>({
-    from_currency: asset.symbol,
-    function: 'CURRENCY_EXCHANGE_RATE',
-    to_currency: USD_MARKET,
-  });
-
-  assertAlphaVantageSuccess(response);
-
-  const exchangeRate = response['Realtime Currency Exchange Rate'];
-  const price = toFiniteNumber(exchangeRate?.['5. Exchange Rate']);
+export async function getCoinbaseQuote(symbol: string): Promise<MarketQuote> {
+  const asset = resolveCoinbaseAsset(symbol);
+  const ticker = await fetchCoinbase<CoinbaseTickerResponse>(
+    `/products/${asset.productId}/ticker`
+  );
+  const price = toFiniteNumber(ticker.price);
 
   if (price === null) {
-    throw new MarketDataError('Cotacao indisponivel na Alpha Vantage.', 502);
+    throw new MarketDataError('Cotacao indisponivel na Coinbase.', 502);
   }
 
   return {
@@ -133,28 +123,35 @@ export async function getAlphaVantageQuote(
     type: 'crypto',
     currency: 'USD',
     price,
-    updatedAt: parseAlphaVantageDateTime(exchangeRate?.['6. Last Refreshed']),
+    updatedAt: parseCoinbaseDateTime(ticker.time),
+    volume: toFiniteNumber(ticker.volume) ?? undefined,
   };
 }
 
-export async function getAlphaVantageCandles(
+export async function getCoinbaseCandles(
   symbol: string,
   timeframe: MarketTimeframe
-): Promise<AlphaVantageCandleResult> {
-  const asset = resolveAlphaVantageAsset(symbol);
+): Promise<CoinbaseCandleResult> {
+  const asset = resolveCoinbaseAsset(symbol);
   const cacheKey = buildCandleCacheKey(asset.symbol, timeframe);
   const requiredRange = getRequiredRangeForTimeframe(timeframe);
   const cachedData = await loadCandleCache(cacheKey);
   const cachedCandles = cachedData?.candles ?? [];
-  const cachedRangeCandles = filterCandlesForRange(cachedCandles, requiredRange);
+  const missingRanges = getMissingRanges(requiredRange, cachedCandles);
+  const cachedRangeCandles = filterCandlesForRange(
+    cachedCandles,
+    requiredRange
+  );
   const cacheHit =
     cachedRangeCandles.length > 0 &&
+    missingRanges.length === 0 &&
     isCacheFresh(cachedData?.updatedAt, timeframe);
 
   if (cacheHit) {
-    logAlphaVantageCandles({
+    logCoinbaseCandles({
       cacheHit: true,
       fetchedCandlesCount: 0,
+      missingRanges,
       returnedCandlesCount: cachedRangeCandles.length,
       symbol: asset.symbol,
       timeframe,
@@ -167,28 +164,41 @@ export async function getAlphaVantageCandles(
   }
 
   try {
-    const fetchedCandles = await fetchAlphaVantageDailyCandles(asset.symbol);
-    const normalizedCandles = dedupeCandlesByTime(fetchedCandles);
-    const returnedCandles = filterCandlesForRange(
-      normalizedCandles,
-      requiredRange
-    );
+    const fetchedCandles: MarketCandle[] = [];
+
+    for (const missingRange of missingRanges) {
+      fetchedCandles.push(
+        ...(await fetchCoinbaseCandlesRange(
+          asset.productId,
+          missingRange.from,
+          missingRange.to,
+          requiredRange.granularity
+        ))
+      );
+    }
+
+    const mergedCandles = dedupeCandlesByTime([
+      ...cachedCandles,
+      ...fetchedCandles,
+    ]);
+    const returnedCandles = filterCandlesForRange(mergedCandles, requiredRange);
 
     if (returnedCandles.length === 0) {
       throw new MarketDataError(
-        'Alpha Vantage nao retornou historico suficiente para esta cripto.',
+        'Coinbase nao retornou candles suficientes para esta cripto.',
         502
       );
     }
 
     await saveCandleCache(
       cacheKey,
-      createCandleCacheData(asset.symbol, timeframe, normalizedCandles)
+      createCandleCacheData(asset.symbol, timeframe, mergedCandles)
     );
 
-    logAlphaVantageCandles({
+    logCoinbaseCandles({
       cacheHit: false,
-      fetchedCandlesCount: normalizedCandles.length,
+      fetchedCandlesCount: fetchedCandles.length,
+      missingRanges,
       returnedCandlesCount: returnedCandles.length,
       symbol: asset.symbol,
       timeframe,
@@ -200,9 +210,10 @@ export async function getAlphaVantageCandles(
     };
   } catch (error) {
     if (cachedRangeCandles.length > 0) {
-      logAlphaVantageCandles({
+      logCoinbaseCandles({
         cacheHit: false,
         fetchedCandlesCount: 0,
+        missingRanges,
         returnedCandlesCount: cachedRangeCandles.length,
         stale: true,
         symbol: asset.symbol,
@@ -219,7 +230,7 @@ export async function getAlphaVantageCandles(
   }
 }
 
-export function resolveAlphaVantageAsset(symbol: string): CryptoAsset {
+export function resolveCoinbaseAsset(symbol: string): CryptoAsset {
   const rawSymbol = symbol.trim().replace(/^crypto:/i, '');
   const normalizedSymbol = rawSymbol.toLowerCase();
   const compactSymbol = normalizedSymbol.replace(/[^a-z0-9]/g, '');
@@ -247,49 +258,45 @@ export function resolveAlphaVantageAsset(symbol: string): CryptoAsset {
   return getKnownAsset(compactSymbol.toUpperCase());
 }
 
-async function fetchAlphaVantageDailyCandles(
-  symbol: string
+async function fetchCoinbaseCandlesRange(
+  productId: string,
+  from: number,
+  to: number,
+  granularity: number
 ): Promise<MarketCandle[]> {
-  const response = await fetchAlphaVantage<AlphaVantageDailyResponse>({
-    function: 'DIGITAL_CURRENCY_DAILY',
-    market: USD_MARKET,
-    outputsize: 'full',
-    symbol,
-  });
+  const candles: MarketCandle[] = [];
+  const maxChunkSeconds = granularity * (maxCandlesPerRequest - 1);
+  let chunkFrom = from;
 
-  assertAlphaVantageSuccess(response);
-
-  const timeSeries = response['Time Series (Digital Currency Daily)'];
-
-  if (!timeSeries) {
-    throw new MarketDataError(
-      'Historico de cripto indisponivel na Alpha Vantage.',
-      502
+  while (chunkFrom < to) {
+    const chunkTo = Math.min(chunkFrom + maxChunkSeconds, to);
+    const response = await fetchCoinbase<CoinbaseCandle[]>(
+      `/products/${productId}/candles`,
+      {
+        end: new Date(chunkTo * 1000).toISOString(),
+        granularity: String(granularity),
+        start: new Date(chunkFrom * 1000).toISOString(),
+      }
     );
+
+    candles.push(...response.map(parseCoinbaseCandle).filter(isMarketCandle));
+    chunkFrom = chunkTo + granularity;
   }
 
-  return Object.entries(timeSeries)
-    .map(([date, values]) => parseDailyCandle(date, values))
-    .filter((candle): candle is MarketCandle => candle !== null)
-    .sort((left, right) => left.time - right.time);
+  return dedupeCandlesByTime(candles);
 }
 
-async function fetchAlphaVantage<T>(
-  params: Record<string, string>
+async function fetchCoinbase<T>(
+  path: string,
+  params?: Record<string, string>
 ): Promise<T> {
-  const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
+  const url = new URL(`${COINBASE_BASE_URL}${path}`);
 
-  if (!apiKey) {
-    throw new MarketDataError('ALPHA_VANTAGE_API_KEY nao configurada.', 500);
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, value);
+    }
   }
-
-  const url = new URL(ALPHA_VANTAGE_BASE_URL);
-
-  for (const [key, value] of Object.entries(params)) {
-    url.searchParams.set(key, value);
-  }
-
-  url.searchParams.set('apikey', apiKey);
 
   let response: Response;
 
@@ -300,12 +307,12 @@ async function fetchAlphaVantage<T>(
       },
     });
   } catch {
-    throw new MarketDataError('Nao foi possivel conectar a Alpha Vantage.');
+    throw new MarketDataError('Nao foi possivel conectar a Coinbase.');
   }
 
   if (!response.ok) {
     throw new MarketDataError(
-      `Alpha Vantage respondeu com erro ${response.status}.`,
+      `Coinbase respondeu com erro ${response.status}.`,
       response.status
     );
   }
@@ -313,26 +320,62 @@ async function fetchAlphaVantage<T>(
   return (await response.json()) as T;
 }
 
-function parseDailyCandle(
-  date: string,
-  values: Record<string, string>
-): MarketCandle | null {
-  const time = Math.floor(new Date(`${date}T00:00:00.000Z`).getTime() / 1000);
-  const open = getAlphaNumber(values, ['1. open', '1a. open']);
-  const high = getAlphaNumber(values, ['2. high', '2a. high']);
-  const low = getAlphaNumber(values, ['3. low', '3a. low']);
-  const close = getAlphaNumber(values, ['4. close', '4a. close']);
-  const volume = getAlphaNumber(values, ['5. volume']);
+function getMissingRanges(
+  requiredRange: RequiredCandleRange,
+  cachedCandles: MarketCandle[]
+): MissingCandleRange[] {
+  const normalizedCandles = filterCandlesForRange(cachedCandles, requiredRange);
 
-  if (
-    !Number.isFinite(time) ||
-    open === null ||
-    high === null ||
-    low === null ||
-    close === null
-  ) {
-    return null;
+  if (normalizedCandles.length === 0) {
+    return [
+      {
+        from: requiredRange.from,
+        to: requiredRange.to,
+      },
+    ];
   }
+
+  const ranges: MissingCandleRange[] = [];
+  const firstCachedTime = normalizedCandles[0].time;
+  const lastCachedTime = normalizedCandles[normalizedCandles.length - 1].time;
+
+  if (firstCachedTime > requiredRange.firstTime) {
+    ranges.push({
+      from: requiredRange.from,
+      to: firstCachedTime - requiredRange.granularity,
+    });
+  }
+
+  if (lastCachedTime < requiredRange.lastTime) {
+    ranges.push({
+      from: lastCachedTime + requiredRange.granularity,
+      to: requiredRange.to,
+    });
+  }
+
+  return ranges.filter((range) => range.to >= range.from);
+}
+
+function getRequiredRangeForTimeframe(
+  timeframe: MarketTimeframe
+): RequiredCandleRange {
+  const now = Math.floor(Date.now() / 1000);
+  const granularity = getCoinbaseGranularity(timeframe);
+  const rangeSeconds = getRangeSeconds(timeframe);
+  const firstTime = getBucketTime(now - rangeSeconds, granularity);
+  const lastTime = getBucketTime(now, granularity);
+
+  return {
+    from: firstTime,
+    to: now,
+    firstTime,
+    lastTime,
+    granularity,
+  };
+}
+
+function parseCoinbaseCandle(candle: CoinbaseCandle): MarketCandle {
+  const [time, low, high, open, close, volume] = candle;
 
   return {
     time,
@@ -340,47 +383,7 @@ function parseDailyCandle(
     high,
     low,
     close,
-    volume: volume ?? undefined,
-  };
-}
-
-function getAlphaNumber(
-  values: Record<string, string>,
-  fieldPrefixes: string[]
-) {
-  for (const [key, value] of Object.entries(values)) {
-    if (fieldPrefixes.some((prefix) => key.startsWith(prefix))) {
-      return toFiniteNumber(value);
-    }
-  }
-
-  return null;
-}
-
-function assertAlphaVantageSuccess(response: AlphaVantageApiEnvelope) {
-  if (response['Error Message']) {
-    throw new MarketDataError(response['Error Message'], 502);
-  }
-
-  if (response.Note || response.Information) {
-    throw new MarketDataError(
-      response.Note ?? response.Information ?? 'Alpha Vantage limitou a chamada.',
-      429
-    );
-  }
-}
-
-function getRequiredRangeForTimeframe(
-  timeframe: MarketTimeframe
-): RequiredCandleRange {
-  const day = 24 * 60 * 60;
-  const now = Math.floor(Date.now() / 1000);
-  const firstTime = getDailyBucketTime(now - getRangeDays(timeframe) * day);
-  const lastTime = getDailyBucketTime(now);
-
-  return {
-    firstTime,
-    lastTime,
+    volume,
   };
 }
 
@@ -399,7 +402,7 @@ function dedupeCandlesByTime(candles: MarketCandle[]) {
   const candlesByTime = new Map<number, MarketCandle>();
 
   for (const candle of candles) {
-    if (isValidCandle(candle)) {
+    if (isMarketCandle(candle)) {
       candlesByTime.set(candle.time, { ...candle });
     }
   }
@@ -417,7 +420,7 @@ function createCandleCacheData(
   const normalizedCandles = dedupeCandlesByTime(candles);
 
   return {
-    provider: 'alphavantage',
+    provider: 'coinbase',
     type: 'crypto',
     symbol,
     timeframe,
@@ -431,7 +434,7 @@ function createCandleCacheData(
 function buildCandleCacheKey(symbol: string, timeframe: MarketTimeframe) {
   return [
     'provider',
-    'alphavantage',
+    'coinbase',
     'type',
     'crypto',
     'symbol',
@@ -441,17 +444,38 @@ function buildCandleCacheKey(symbol: string, timeframe: MarketTimeframe) {
   ].join(':');
 }
 
-function getRangeDays(timeframe: MarketTimeframe) {
+function getCoinbaseGranularity(timeframe: MarketTimeframe) {
+  const hour = 60 * 60;
+  const day = 24 * hour;
+
+  const granularitiesByTimeframe: Record<MarketTimeframe, number> = {
+    '1D': hour,
+    '7D': 6 * hour,
+    '1W': 6 * hour,
+    '1M': day,
+    '3M': day,
+    '6M': day,
+    '1Y': day,
+    '2Y': day,
+    MAX: day,
+  };
+
+  return granularitiesByTimeframe[timeframe];
+}
+
+function getRangeSeconds(timeframe: MarketTimeframe) {
+  const day = 24 * 60 * 60;
+
   const rangesByTimeframe: Record<MarketTimeframe, number> = {
-    '1D': 1,
-    '7D': 7,
-    '1W': 7,
-    '1M': 30,
-    '3M': 90,
-    '6M': 180,
-    '1Y': 365,
-    '2Y': 730,
-    MAX: 3650,
+    '1D': day,
+    '7D': 7 * day,
+    '1W': 7 * day,
+    '1M': 30 * day,
+    '3M': 90 * day,
+    '6M': 180 * day,
+    '1Y': 365 * day,
+    '2Y': 730 * day,
+    MAX: 3650 * day,
   };
 
   return rangesByTimeframe[timeframe];
@@ -473,18 +497,16 @@ function isCacheFresh(updatedAt: number | undefined, timeframe: MarketTimeframe)
   return Date.now() - updatedAt * 1000 < getCandlesCacheTtlMs(timeframe);
 }
 
-function getDailyBucketTime(timestampSeconds: number) {
-  const date = new Date(timestampSeconds * 1000);
-  date.setUTCHours(0, 0, 0, 0);
-  return Math.floor(date.getTime() / 1000);
+function getBucketTime(timestampSeconds: number, granularity: number) {
+  return Math.floor(timestampSeconds / granularity) * granularity;
 }
 
-function parseAlphaVantageDateTime(value: string | undefined) {
+function parseCoinbaseDateTime(value: string | undefined) {
   if (!value) {
     return new Date().toISOString();
   }
 
-  const parsedTime = new Date(`${value.replace(' ', 'T')}Z`).getTime();
+  const parsedTime = new Date(value).getTime();
   return Number.isFinite(parsedTime)
     ? new Date(parsedTime).toISOString()
     : new Date().toISOString();
@@ -500,7 +522,13 @@ function getKnownAsset(symbol: string): CryptoAsset {
     (asset) => asset.symbol === upperSymbol
   );
 
-  return knownAsset ?? { symbol: upperSymbol, name: upperSymbol };
+  return (
+    knownAsset ?? {
+      symbol: upperSymbol,
+      productId: `${upperSymbol}-${USD_PRODUCT_SUFFIX}`,
+      name: upperSymbol,
+    }
+  );
 }
 
 function toSearchResult(asset: CryptoAsset): MarketSearchResult {
@@ -510,13 +538,14 @@ function toSearchResult(asset: CryptoAsset): MarketSearchResult {
     name: asset.name,
     type: 'crypto',
     currency: 'USD',
-    exchange: 'Alpha Vantage',
+    exchange: 'Coinbase',
   };
 }
 
-function logAlphaVantageCandles(params: {
+function logCoinbaseCandles(params: {
   cacheHit: boolean;
   fetchedCandlesCount: number;
+  missingRanges: MissingCandleRange[];
   returnedCandlesCount: number;
   stale?: boolean;
   symbol: string;
@@ -525,11 +554,12 @@ function logAlphaVantageCandles(params: {
   console.log(
     [
       '[market-data]',
-      'provider=alphavantage',
+      'provider=coinbase',
       'type=crypto',
       `symbol=${params.symbol}`,
       `timeframe=${params.timeframe}`,
       `cacheHit=${params.cacheHit}`,
+      `missingRanges=${JSON.stringify(params.missingRanges)}`,
       `fetchedCandlesCount=${params.fetchedCandlesCount}`,
       `returnedCandlesCount=${params.returnedCandlesCount}`,
       `stale=${params.stale === true}`,
@@ -537,7 +567,7 @@ function logAlphaVantageCandles(params: {
   );
 }
 
-function isValidCandle(candle: MarketCandle) {
+function isMarketCandle(candle: MarketCandle) {
   return (
     Number.isFinite(candle.time) &&
     Number.isFinite(candle.open) &&

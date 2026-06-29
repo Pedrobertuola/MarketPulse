@@ -10,8 +10,6 @@ const legacyCryptoSymbols: Record<string, string> = {
   'avalanche-2': 'AVAX',
   avax: 'AVAX',
   bitcoin: 'BTC',
-  binancecoin: 'BNB',
-  bnb: 'BNB',
   btc: 'BTC',
   cardano: 'ADA',
   chainlink: 'LINK',
@@ -78,7 +76,7 @@ function normalizeAsset(asset: Asset): Asset {
 
   return {
     ...asset,
-    exchange: 'Alpha Vantage',
+    exchange: 'Coinbase',
     id: `crypto:${marketSymbol}`,
     marketSymbol,
   };

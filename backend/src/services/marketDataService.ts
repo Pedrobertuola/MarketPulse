@@ -13,11 +13,11 @@ import {
   searchBrazilianAssets,
 } from './brapiService';
 import {
-  getAlphaVantageCandles,
-  getAlphaVantageQuote,
-  resolveAlphaVantageAsset,
-  searchAlphaVantageCrypto,
-} from './alphaVantageService';
+  getCoinbaseCandles,
+  getCoinbaseQuote,
+  resolveCoinbaseAsset,
+  searchCoinbaseCrypto,
+} from './coinbaseService';
 
 type CachedResult<T> = {
   value: T;
@@ -38,7 +38,7 @@ export async function searchAssets(
     searchCacheTtlMs,
     async () => {
       if (type === 'crypto') {
-        return searchAlphaVantageCrypto(query);
+        return searchCoinbaseCrypto(query);
       }
 
       if (type === 'brazilian_stock') {
@@ -55,16 +55,16 @@ export async function getQuote(
   type: MarketAssetType
 ): Promise<CachedResult<MarketQuote>> {
   if (type === 'crypto') {
-    const resolvedAsset = resolveAlphaVantageAsset(symbol);
+    const resolvedAsset = resolveCoinbaseAsset(symbol);
 
     return getCachedMarketData({
       endpoint: 'quote',
       key: buildCacheKey('quote', resolvedAsset.symbol, type),
-      provider: 'alphavantage',
+      provider: 'coinbase',
       symbol: resolvedAsset.symbol,
       type,
       ttlMs: quoteCacheTtlMs,
-      factory: () => getAlphaVantageQuote(resolvedAsset.symbol),
+      factory: () => getCoinbaseQuote(resolvedAsset.symbol),
     });
   }
 
@@ -89,8 +89,8 @@ export async function getCandles(
   timeframe: MarketTimeframe
 ): Promise<CachedResult<MarketCandle[]>> {
   if (type === 'crypto') {
-    const resolvedAsset = resolveAlphaVantageAsset(symbol);
-    const result = await getAlphaVantageCandles(
+    const resolvedAsset = resolveCoinbaseAsset(symbol);
+    const result = await getCoinbaseCandles(
       resolvedAsset.symbol,
       timeframe
     );
@@ -121,7 +121,7 @@ async function getCachedMarketData<T>(params: {
   endpoint: 'quote' | 'candles';
   factory: () => Promise<T>;
   key: string;
-  provider: 'alphavantage' | 'brapi.dev';
+  provider: 'coinbase' | 'brapi.dev';
   symbol: string;
   timeframe?: MarketTimeframe;
   ttlMs: number;
@@ -185,7 +185,7 @@ function getCandlesCacheTtlMs(timeframe: MarketTimeframe) {
 function logMarketProvider(params: {
   cacheHit: boolean;
   endpoint: 'quote' | 'candles';
-  provider: 'alphavantage' | 'brapi.dev';
+  provider: 'coinbase' | 'brapi.dev';
   symbol: string;
   type: MarketAssetType;
   timeframe?: MarketTimeframe;

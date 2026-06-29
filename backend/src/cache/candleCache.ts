@@ -4,7 +4,7 @@ import path from 'path';
 import type { MarketCandle, MarketTimeframe } from '../types/marketTypes';
 
 export type CandleCacheData = {
-  provider: 'alphavantage';
+  provider: 'coinbase';
   type: 'crypto';
   symbol: string;
   timeframe: MarketTimeframe;
@@ -87,7 +87,7 @@ function isCandleCacheData(value: unknown): value is CandleCacheData {
   }
 
   return (
-    value.provider === 'alphavantage' &&
+    value.provider === 'coinbase' &&
     value.type === 'crypto' &&
     typeof value.symbol === 'string' &&
     typeof value.timeframe === 'string' &&

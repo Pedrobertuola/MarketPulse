@@ -56,8 +56,6 @@ const cryptoSymbolAliases: Record<string, string> = {
   'avalanche-2': 'AVAX',
   avax: 'AVAX',
   bitcoin: 'BTC',
-  binancecoin: 'BNB',
-  bnb: 'BNB',
   btc: 'BTC',
   cardano: 'ADA',
   chainlink: 'LINK',
