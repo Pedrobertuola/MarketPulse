@@ -3,7 +3,7 @@
 MarketPulse e um app Expo com TypeScript para acompanhar acoes brasileiras e criptoativos em uma watchlist local. A arquitetura usa um backend proprio entre o app e as APIs externas:
 
 ```text
-App MarketPulse -> Backend MarketPulse -> CoinGecko / brapi.dev
+App MarketPulse -> Backend MarketPulse -> Alpha Vantage / brapi.dev
 ```
 
 Essa separacao evita expor tokens no frontend, centraliza a normalizacao dos dados e reduz chamadas externas com cache em memoria.
@@ -13,25 +13,25 @@ Essa separacao evita expor tokens no frontend, centraliza a normalizacao dos dad
 - Frontend: Expo SDK 56, React Native, TypeScript, AsyncStorage
 - Backend: Node.js, Express, TypeScript
 - Graficos: lightweight-charts no web e fallback nativo
-- Dados externos: CoinGecko e brapi.dev
+- Dados externos: Alpha Vantage e brapi.dev
 
 ## APIs Usadas
 
-- CoinGecko: cotacoes e historico de criptomoedas em USD.
+- Alpha Vantage: cotacoes e historico diario de criptomoedas em USD.
 - brapi.dev: acoes brasileiras, FIIs, ETFs e BDRs em BRL.
 
 Criptomoedas principais aceitas pelo backend:
 
-- `BTC` -> `bitcoin`
-- `ETH` -> `ethereum`
-- `SOL` -> `solana`
-- `BNB` -> `binancecoin`
-- `XRP` -> `ripple`
-- `ADA` -> `cardano`
-- `DOGE` -> `dogecoin`
-- `AVAX` -> `avalanche-2`
-- `LINK` -> `chainlink`
-- `DOT` -> `polkadot`
+- `BTC`
+- `ETH`
+- `SOL`
+- `BNB`
+- `XRP`
+- `ADA`
+- `DOGE`
+- `AVAX`
+- `LINK`
+- `DOT`
 
 Exemplos B3 via brapi.dev:
 
@@ -89,13 +89,14 @@ O backend usa cache em memoria para proteger os limites das APIs externas:
 - Busca: 5 minutos
 
 A chave segue o padrao `endpoint + symbol + type + timeframe`.
-Candles de cripto tambem sao persistidos em `backend/.cache/candles.json` para reaproveitar historico ja buscado e consultar apenas ranges faltantes no CoinGecko.
+Candles de cripto tambem sao persistidos em `backend/.cache/candles.json` para reaproveitar historico ja buscado e proteger o limite de chamadas da Alpha Vantage.
 
 ## Variaveis de Ambiente
 
 Backend: copie `backend/.env.example` para `backend/.env`.
 
 ```bash
+ALPHA_VANTAGE_API_KEY=
 BRAPI_TOKEN=
 PORT=3333
 ```
@@ -143,7 +144,7 @@ npm run web
 ## Funcionalidades
 
 - Watchlist local persistida no dispositivo
-- Busca de criptomoedas via backend/CoinGecko
+- Busca de criptomoedas via backend/Alpha Vantage
 - Busca de ativos brasileiros via backend/brapi.dev
 - Tela de detalhe por ativo
 - Grafico candlestick
@@ -157,9 +158,9 @@ npm run web
 
 O backend esconde chaves, reduz chamadas repetidas, normaliza formatos diferentes de APIs externas e deixa o frontend com um contrato unico.
 
-### Por que CoinGecko para cripto
+### Por que Alpha Vantage para cripto
 
-CoinGecko entrega preco atual e historico de mercado para cripto em USD sem depender de candles de exchange dentro do app.
+Alpha Vantage entrega preco atual e historico diario de criptomoedas em USD por uma API server-side, mantendo a chave fora do frontend.
 
 ### Por que brapi.dev para B3
 
@@ -172,5 +173,5 @@ RSI, SMA e Bandas de Bollinger sao calculos deterministas sobre candles normaliz
 ## Seguranca
 
 - O frontend chama apenas o backend MarketPulse.
-- `BRAPI_TOKEN` fica apenas no backend.
+- `ALPHA_VANTAGE_API_KEY` e `BRAPI_TOKEN` ficam apenas no backend.
 - `.env` nao deve ser versionado.

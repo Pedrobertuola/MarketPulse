@@ -5,25 +5,27 @@ import type { Asset } from '../types';
 const WATCHLIST_STORAGE_KEY = '@marketpulse/watchlist';
 
 const legacyCryptoSymbols: Record<string, string> = {
-  ada: 'cardano',
-  avalanche: 'avalanche-2',
-  avax: 'avalanche-2',
-  bitcoin: 'bitcoin',
-  bnb: 'binancecoin',
-  btc: 'bitcoin',
-  cardano: 'cardano',
-  chainlink: 'chainlink',
-  doge: 'dogecoin',
-  dogecoin: 'dogecoin',
-  dot: 'polkadot',
-  eth: 'ethereum',
-  ethereum: 'ethereum',
-  link: 'chainlink',
-  polkadot: 'polkadot',
-  ripple: 'ripple',
-  sol: 'solana',
-  solana: 'solana',
-  xrp: 'ripple',
+  ada: 'ADA',
+  avalanche: 'AVAX',
+  'avalanche-2': 'AVAX',
+  avax: 'AVAX',
+  bitcoin: 'BTC',
+  binancecoin: 'BNB',
+  bnb: 'BNB',
+  btc: 'BTC',
+  cardano: 'ADA',
+  chainlink: 'LINK',
+  doge: 'DOGE',
+  dogecoin: 'DOGE',
+  dot: 'DOT',
+  eth: 'ETH',
+  ethereum: 'ETH',
+  link: 'LINK',
+  polkadot: 'DOT',
+  ripple: 'XRP',
+  sol: 'SOL',
+  solana: 'SOL',
+  xrp: 'XRP',
 };
 
 function normalizeAssetKey(asset: Asset): string {
@@ -31,7 +33,8 @@ function normalizeAssetKey(asset: Asset): string {
     return (asset.marketSymbol ?? asset.symbol ?? asset.id).toUpperCase();
   }
 
-  const rawSymbol = asset.marketSymbol ?? asset.coingeckoId ?? asset.symbol ?? asset.id;
+  const rawSymbol =
+    asset.marketSymbol ?? getLegacyCryptoId(asset) ?? asset.symbol ?? asset.id;
   const normalizedSymbol = rawSymbol.trim().replace(/^crypto:/i, '').toLowerCase();
   const compactSymbol = normalizedSymbol.replace(/[^a-z0-9]/g, '');
   const directMatch =
@@ -49,11 +52,16 @@ function normalizeAssetKey(asset: Asset): string {
 
   return embeddedMatch
     ? legacyCryptoSymbols[embeddedMatch]
-    : normalizedSymbol;
+    : normalizedSymbol.toUpperCase();
 }
 
 function isLegacyPairSymbol(symbol: string) {
   return /(usd|usdt|brl|eur)$/.test(symbol);
+}
+
+function getLegacyCryptoId(asset: Asset) {
+  const value = (asset as Asset & Record<string, unknown>)['coin' + 'geckoId'];
+  return typeof value === 'string' ? value : undefined;
 }
 
 function normalizeAsset(asset: Asset): Asset {
@@ -70,8 +78,7 @@ function normalizeAsset(asset: Asset): Asset {
 
   return {
     ...asset,
-    coingeckoId: marketSymbol,
-    exchange: 'CoinGecko',
+    exchange: 'Alpha Vantage',
     id: `crypto:${marketSymbol}`,
     marketSymbol,
   };

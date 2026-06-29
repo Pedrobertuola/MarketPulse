@@ -32,13 +32,12 @@ export const mockWatchlistAssets: Asset[] = [
     },
   },
   {
-    id: 'crypto:bitcoin',
-    marketSymbol: 'bitcoin',
-    coingeckoId: 'bitcoin',
+    id: 'crypto:BTC',
+    marketSymbol: 'BTC',
     symbol: 'BTC',
     name: 'Bitcoin',
     type: 'crypto',
-    exchange: 'CoinGecko',
+    exchange: 'Alpha Vantage',
     quote: {
       price: 108250.42,
       change: -956.18,
@@ -50,13 +49,12 @@ export const mockWatchlistAssets: Asset[] = [
     },
   },
   {
-    id: 'crypto:ethereum',
-    marketSymbol: 'ethereum',
-    coingeckoId: 'ethereum',
+    id: 'crypto:ETH',
+    marketSymbol: 'ETH',
     symbol: 'ETH',
     name: 'Ethereum',
     type: 'crypto',
-    exchange: 'CoinGecko',
+    exchange: 'Alpha Vantage',
     quote: {
       price: 3248.93,
       change: 38.12,

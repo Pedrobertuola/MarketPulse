@@ -51,25 +51,27 @@ const API_BASE_URL =
   'http://localhost:3333';
 
 const cryptoSymbolAliases: Record<string, string> = {
-  ada: 'cardano',
-  avalanche: 'avalanche-2',
-  avax: 'avalanche-2',
-  bitcoin: 'bitcoin',
-  bnb: 'binancecoin',
-  cardano: 'cardano',
-  chainlink: 'chainlink',
-  doge: 'dogecoin',
-  dogecoin: 'dogecoin',
-  dot: 'polkadot',
-  eth: 'ethereum',
-  ethereum: 'ethereum',
-  link: 'chainlink',
-  polkadot: 'polkadot',
-  ripple: 'ripple',
-  sol: 'solana',
-  solana: 'solana',
-  xrp: 'ripple',
-  btc: 'bitcoin',
+  ada: 'ADA',
+  avalanche: 'AVAX',
+  'avalanche-2': 'AVAX',
+  avax: 'AVAX',
+  bitcoin: 'BTC',
+  binancecoin: 'BNB',
+  bnb: 'BNB',
+  btc: 'BTC',
+  cardano: 'ADA',
+  chainlink: 'LINK',
+  doge: 'DOGE',
+  dogecoin: 'DOGE',
+  dot: 'DOT',
+  eth: 'ETH',
+  ethereum: 'ETH',
+  link: 'LINK',
+  polkadot: 'DOT',
+  ripple: 'XRP',
+  sol: 'SOL',
+  solana: 'SOL',
+  xrp: 'XRP',
 };
 
 export async function searchCrypto(query: string): Promise<CryptoSearchResult[]> {
@@ -166,7 +168,7 @@ export async function getMarketCandles(
 export function resolveAssetMarketSymbol(asset: Asset) {
   if (asset.type === 'crypto') {
     return resolveCryptoMarketSymbol(
-      asset.marketSymbol ?? asset.coingeckoId ?? asset.symbol ?? asset.id
+      asset.marketSymbol ?? getLegacyCryptoId(asset) ?? asset.symbol ?? asset.id
     );
   }
 
@@ -191,11 +193,16 @@ export function resolveCryptoMarketSymbol(symbol: string) {
 
   return embeddedMatch
     ? cryptoSymbolAliases[embeddedMatch]
-    : normalizedSymbol;
+    : normalizedSymbol.toUpperCase();
 }
 
 function isLegacyPairSymbol(symbol: string) {
   return /(usd|usdt|brl|eur)$/.test(symbol);
+}
+
+function getLegacyCryptoId(asset: Asset) {
+  const value = (asset as Asset & Record<string, unknown>)['coin' + 'geckoId'];
+  return typeof value === 'string' ? value : undefined;
 }
 
 function mapQuote(quote: BackendQuote): PriceQuote {

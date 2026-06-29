@@ -33,7 +33,6 @@ export type Asset = {
   type: AssetType;
   exchange?: string;
   marketSymbol?: string;
-  coingeckoId?: string;
   imageUrl?: string;
   quote: PriceQuote;
 };

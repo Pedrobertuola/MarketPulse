@@ -5,6 +5,7 @@ import { EmptyState, ErrorState, LoadingState, SectionTitle } from '../component
 import {
   getBrazilianStockQuote,
   getCryptoQuote,
+  resolveAssetMarketSymbol,
   resolveCryptoMarketSymbol,
   searchBrazilianStock,
   searchCrypto,
@@ -36,9 +37,7 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
   const watchlistCryptoIds = new Set(
     watchlist
       .filter((asset) => asset.type === 'crypto')
-      .map((asset) =>
-        resolveCryptoMarketSymbol(asset.marketSymbol ?? asset.coingeckoId ?? asset.symbol)
-      )
+      .map((asset) => resolveAssetMarketSymbol(asset))
   );
 
   const watchlistStockTickers = new Set(
@@ -106,8 +105,7 @@ export function SearchScreen({ watchlist, onAddAsset }: SearchScreenProps) {
         symbol: result.symbol,
         name: result.name,
         type: 'crypto',
-        coingeckoId: marketSymbol,
-        exchange: 'CoinGecko',
+        exchange: 'Alpha Vantage',
         imageUrl: result.imageUrl,
         quote,
       });

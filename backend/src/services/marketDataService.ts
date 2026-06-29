@@ -13,11 +13,11 @@ import {
   searchBrazilianAssets,
 } from './brapiService';
 import {
-  getCoinGeckoCandles,
-  getCoinGeckoQuote,
-  resolveCoinGeckoAsset,
-  searchCoinGeckoCrypto,
-} from './coingeckoService';
+  getAlphaVantageCandles,
+  getAlphaVantageQuote,
+  resolveAlphaVantageAsset,
+  searchAlphaVantageCrypto,
+} from './alphaVantageService';
 
 type CachedResult<T> = {
   value: T;
@@ -38,7 +38,7 @@ export async function searchAssets(
     searchCacheTtlMs,
     async () => {
       if (type === 'crypto') {
-        return searchCoinGeckoCrypto(query);
+        return searchAlphaVantageCrypto(query);
       }
 
       if (type === 'brazilian_stock') {
@@ -55,16 +55,16 @@ export async function getQuote(
   type: MarketAssetType
 ): Promise<CachedResult<MarketQuote>> {
   if (type === 'crypto') {
-    const resolvedAsset = resolveCoinGeckoAsset(symbol);
+    const resolvedAsset = resolveAlphaVantageAsset(symbol);
 
     return getCachedMarketData({
       endpoint: 'quote',
-      key: buildCacheKey('quote', resolvedAsset.id, type),
-      provider: 'coingecko',
+      key: buildCacheKey('quote', resolvedAsset.symbol, type),
+      provider: 'alphavantage',
       symbol: resolvedAsset.symbol,
       type,
       ttlMs: quoteCacheTtlMs,
-      factory: () => getCoinGeckoQuote(resolvedAsset.id),
+      factory: () => getAlphaVantageQuote(resolvedAsset.symbol),
     });
   }
 
@@ -89,8 +89,11 @@ export async function getCandles(
   timeframe: MarketTimeframe
 ): Promise<CachedResult<MarketCandle[]>> {
   if (type === 'crypto') {
-    const resolvedAsset = resolveCoinGeckoAsset(symbol);
-    const result = await getCoinGeckoCandles(resolvedAsset.id, timeframe);
+    const resolvedAsset = resolveAlphaVantageAsset(symbol);
+    const result = await getAlphaVantageCandles(
+      resolvedAsset.symbol,
+      timeframe
+    );
 
     return {
       value: result.candles,
@@ -118,7 +121,7 @@ async function getCachedMarketData<T>(params: {
   endpoint: 'quote' | 'candles';
   factory: () => Promise<T>;
   key: string;
-  provider: 'coingecko' | 'brapi.dev';
+  provider: 'alphavantage' | 'brapi.dev';
   symbol: string;
   timeframe?: MarketTimeframe;
   ttlMs: number;
@@ -182,7 +185,7 @@ function getCandlesCacheTtlMs(timeframe: MarketTimeframe) {
 function logMarketProvider(params: {
   cacheHit: boolean;
   endpoint: 'quote' | 'candles';
-  provider: 'coingecko' | 'brapi.dev';
+  provider: 'alphavantage' | 'brapi.dev';
   symbol: string;
   type: MarketAssetType;
   timeframe?: MarketTimeframe;
